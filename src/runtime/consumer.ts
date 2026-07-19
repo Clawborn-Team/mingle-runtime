@@ -107,6 +107,11 @@ export async function processWake(input: ProcessWakeInput): Promise<ProcessWakeR
  * / plaza @ + follow-up, P1-3) → postToChannel. A target kind we can't route yet
  * returns `unsupported` so the caller NACKs instead of silently dropping the
  * reply (owner/task Actions land in a later increment).
+ *
+ * im-server posts to a channel by SLUG (`/v1/channels/:slug/messages`), but the
+ * reply_target only carries `channel_id`. The raw wake event carries the slug
+ * (`payload.conversation.channel_slug`), so we route by that; a channel wake
+ * without a recoverable slug is `unsupported` (NACK) rather than a wrong post.
  */
 async function deliverReply(
   packet: WakePacket,
@@ -119,13 +124,22 @@ async function deliverReply(
     case "dm":
       await imClient.sendDm(target.peer_id, reply);
       return "delivered";
-    case "channel":
-      await imClient.postToChannel(target.channel_id, reply);
+    case "channel": {
+      const slug = channelSlugFromEvent(packet);
+      if (!slug) return "unsupported";
+      await imClient.postToChannel(slug, reply);
       return "delivered";
+    }
     default:
       // owner/task have no delivery route yet — do NOT pretend it was handled.
       return "unsupported";
   }
+}
+
+/** The channel slug carried on the raw wake event (im-server posts by slug). */
+function channelSlugFromEvent(packet: WakePacket): string | undefined {
+  const convo = packet.wake.event?.payload?.conversation as { channel_slug?: unknown } | undefined;
+  return typeof convo?.channel_slug === "string" && convo.channel_slug ? convo.channel_slug : undefined;
 }
 
 /**

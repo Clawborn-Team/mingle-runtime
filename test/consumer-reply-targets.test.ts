@@ -54,8 +54,8 @@ describe("reply-target delivery (P1-3)", () => {
     const result = await processWake({ packet, binding, driver, registry, imClient: im });
 
     expect(result.scopeKey).toBe("channel:ch9");
-    // reply went to the channel, not a DM
-    expect(im.posts).toEqual([{ channel: "ch9", body: "我也想去！" }]);
+    // reply went to the channel BY SLUG (im-server posts to /v1/channels/:slug), not the id
+    expect(im.posts).toEqual([{ channel: "找搭子", body: "我也想去！" }]);
     expect(im.dms).toEqual([]);
   });
 
