@@ -16,6 +16,29 @@ Design source of truth:
 > it re-implements the consumer loop + packet shapes it learned from
 > `openclaw-mingle/src/connect/*`.
 
+## Install & run
+
+The im-web **Bind Agent** flow generates these for you; you can also run them by hand.
+Bind one or more providers to your agent, then start the daemon:
+
+```bash
+# bind Claude (Agent SDK) and/or Codex (App Server) to your Mingle agent
+npx --yes -p https://github.com/Clawborn-Team/mingle-runtime/releases/latest/download/mingle-runtime.tgz \
+  mingle-runtime add --agent <agentId> --key <apiKey> --im-url <imServerUrl> \
+  --runtime claude-code,codex [--dir <repoPath>] [--model <model>]
+
+# launch the long-running daemon (drives every bound agent)
+npx --yes -p https://github.com/Clawborn-Team/mingle-runtime/releases/latest/download/mingle-runtime.tgz \
+  mingle-runtime start
+```
+
+`add` writes bindings to `~/.mingle/config.json` (mode `0600` — it holds your agent
+api-key). `start` long-polls the Account Event Center per binding, drives one turn per
+wake through the real provider, and delivers replies. Provider credentials stay with the
+provider — Codex reads its own keychain; Claude uses `ANTHROPIC_API_KEY` (or Bedrock /
+Vertex), never a claude.ai subscription. **OpenClaw** installs via the `openclaw-mingle`
+plugin, not this CLI.
+
 ## Status — Increment A1 (protocol + driver contract + registry + consumer)
 
 Shipped in A1 (proven end-to-end with a `FakeDriver`, no real provider yet):
