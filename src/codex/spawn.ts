@@ -36,6 +36,12 @@ export function spawnCodexAppServer(opts: { command?: string; args?: string[]; e
 
   child.stdout.setEncoding("utf8");
   child.stdout.on("data", (chunk: string) => connection.receive(chunk));
+  // DRAIN stderr. It is piped but not part of the JSON-RPC channel; if left
+  // unconsumed, a chatty codex (e.g. more verbose under an npx/npm env) fills the
+  // ~64KB pipe buffer and BLOCKS the codex process mid-turn → the turn stalls and
+  // the runtime delivers no reply. Consume it so codex can always make progress.
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", () => {});
   child.on("exit", (code) => connection.close(new Error(`codex app-server exited (code ${code})`)));
 
   return {
