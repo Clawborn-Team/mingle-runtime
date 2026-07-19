@@ -34,10 +34,34 @@ Shipped in A1 (proven end-to-end with a `FakeDriver`, no real provider yet):
 - **Consumer loop** (`src/runtime/consumer.ts`) — long-poll → parse → scope →
   open-or-resume session → run one turn → deliver reply → ACK. §5.1.
 
+## Status — Increment A2 (Codex App Server driver)
+
+Shipped in A2 (spec §5.4 + the two carry-forward requirements):
+
+- **JSON-RPC / stdio** (`src/codex/jsonrpc-stdio.ts`) — JSONL framing, request↔
+  response correlation, server notifications, and server-initiated requests
+  (Codex asks for approvals this way). Re-entrancy-safe over in-memory peers.
+- **Codex client** (`src/codex/client.ts`) — `initialize` → `thread/start` |
+  `thread/resume` | `thread/fork` → `turn/start` | `turn/interrupt`; a started
+  turn hands back a `completed` promise settled by `turn/completed`.
+- **`CodexAppServerDriver`** (`src/codex/driver.ts`) — maps item + turn
+  notifications → `RuntimeEvent`; surfaces approvals as `approval.requested` and
+  holds the JSON-RPC response open until `approve()` decides (no model
+  self-approval); two-scope isolation → two threads.
+- **`FakeAppServer`** (`src/codex/fake-app-server.ts`) — in-memory protocol peer
+  for the unit tests; scriptable (approval / fail / await-interrupt).
+- **SQLite Session Registry** (`src/runtime/sqlite-session-registry.ts`, built-in
+  `node:sqlite`) — persistent `(binding, scope) → thread_id`; **restart-recovery**
+  test resumes the same Codex thread across a simulated process restart (§5.4).
+- **NACK/backoff discipline** (`src/runtime/consumer.ts`) — a transiently-failed
+  turn NACKs + stops draining (no ACK-on-failure message loss, the im-server
+  P0-3 fix); unparseable packets drop + ACK; cursor advances only on clean drain.
+- **Real-binary path** (`src/codex/spawn.ts`) — spawns `codex app-server` over
+  stdio; a smoke test runs against it when `codex` is on PATH (else skipped).
+  `codex exec` remains diagnostics-only.
+
 ## Next
 
-- **A2** — Codex App Server driver (stdio JSON-RPC, thread start/resume/fork,
-  turn start/steer/interrupt, resume-on-crash) + SQLite registry persistence.
 - **A3** — Claude Agent SDK driver (explicit session_id + resume, in-process
   SDK-MCP Mingle tools, `PreToolUse` permissions, honest auth surfacing).
 - **A4** — OpenClaw adapter + unified install/UI.
