@@ -3,7 +3,7 @@ import { runBindingLoop, startDaemon, toBinding } from "../src/runtime/daemon.js
 import { InMemorySessionRegistry } from "../src/runtime/session-registry.js";
 import { FakeDriver } from "../src/runtime/fake-driver.js";
 import type { Binding, EventCenterClient, UpdatesResult } from "../src/runtime/consumer.js";
-import { dmWakePacket } from "./fixtures/wake-packets.js";
+import { dmRawEvent } from "./fixtures/wake-packets.js";
 
 const binding: Binding = { bindingId: "b1", agentAccountId: "a1", ownerAccountId: "a1", runtimeKind: "codex" };
 
@@ -49,7 +49,7 @@ describe("toBinding", () => {
 
 describe("runBindingLoop", () => {
   it("drains wakes until shouldStop, delivering + acking", async () => {
-    const im = fakeIm([{ events: [{ id: "e1", packet: dmWakePacket }], next_cursor: "c2" }]);
+    const im = fakeIm([{ events: [dmRawEvent], next_cursor: "c2" }]);
     const registry = new InMemorySessionRegistry();
     const driver = new FakeDriver({ reply: "hello back" });
     let ticks = 0;
@@ -113,7 +113,7 @@ describe("startDaemon", () => {
       bindings,
       wait: 0,
       make: (b) => {
-        const im = fakeIm([{ events: [{ id: `${b.bindingId}-e`, packet: dmWakePacket }] }]);
+        const im = fakeIm([{ events: [{ id: `${b.bindingId}-e`, type: dmRawEvent.type, payload: dmRawEvent.payload }] }]);
         const registry = new InMemorySessionRegistry();
         ims.set(b.bindingId, im);
         registries.set(b.bindingId, registry);

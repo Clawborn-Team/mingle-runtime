@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { runBindingOnce, type EventCenterClient, type UpdatesResult, type Binding } from "../src/runtime/consumer.js";
 import { InMemorySessionRegistry } from "../src/runtime/session-registry.js";
 import { FakeDriver } from "../src/runtime/fake-driver.js";
-import { dmWakePacket } from "./fixtures/wake-packets.js";
+import { dmRawEvent, unknownRawEvent } from "./fixtures/wake-packets.js";
 
 function fakeIm(batches: UpdatesResult[]) {
   const queue = [...batches];
@@ -40,7 +40,7 @@ describe("runBindingOnce NACK/backoff discipline (P0-3 carry-forward)", () => {
     const registry = new InMemorySessionRegistry();
     // A driver whose turn emits turn.failed → transient failure.
     const driver = new FakeDriver({ script: "approval-then-fail" });
-    const im = fakeIm([{ events: [{ id: "e1", packet: dmWakePacket }], next_cursor: "c2" }]);
+    const im = fakeIm([{ events: [dmRawEvent], next_cursor: "c2" }]);
 
     await runBindingOnce({ binding, driver, registry, imClient: im });
 
@@ -54,8 +54,8 @@ describe("runBindingOnce NACK/backoff discipline (P0-3 carry-forward)", () => {
     const driver = new FakeDriver({ script: "approval-then-fail" });
     const im = fakeIm([
       { events: [
-        { id: "e1", packet: dmWakePacket },
-        { id: "e2", packet: dmWakePacket },
+        { id: "e1", type: dmRawEvent.type, payload: dmRawEvent.payload },
+        { id: "e2", type: dmRawEvent.type, payload: dmRawEvent.payload },
       ] },
     ]);
 
@@ -67,21 +67,21 @@ describe("runBindingOnce NACK/backoff discipline (P0-3 carry-forward)", () => {
     expect(im.nacked.map((n) => n.id)).not.toContain("e2");
   });
 
-  it("drops + ACKs a non-Mingle / unparseable packet (safe, not a NACK)", async () => {
+  it("drops + ACKs a non-actionable / unknown event (safe, not a NACK)", async () => {
     const registry = new InMemorySessionRegistry();
     const driver = new FakeDriver();
-    const im = fakeIm([{ events: [{ id: "e9", packet: { schema: "not.mingle" } }] }]);
+    const im = fakeIm([{ events: [unknownRawEvent] }]);
 
     await runBindingOnce({ binding, driver, registry, imClient: im });
 
-    expect(im.acked).toEqual(["e9"]);
+    expect(im.acked).toEqual(["e_unknown"]);
     expect(im.nacked).toEqual([]);
   });
 
   it("ACKs a successful turn as before", async () => {
     const registry = new InMemorySessionRegistry();
     const driver = new FakeDriver({ reply: "ok" });
-    const im = fakeIm([{ events: [{ id: "e1", packet: dmWakePacket }] }]);
+    const im = fakeIm([{ events: [dmRawEvent] }]);
 
     await runBindingOnce({ binding, driver, registry, imClient: im });
     expect(im.acked).toEqual(["e1"]);

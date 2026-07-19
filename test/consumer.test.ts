@@ -3,7 +3,7 @@ import { processWake, runBindingOnce, type EventCenterClient, type UpdatesResult
 import { InMemorySessionRegistry } from "../src/runtime/session-registry.js";
 import { FakeDriver } from "../src/runtime/fake-driver.js";
 import { parseWakePacket } from "../src/protocol/wake-packet.js";
-import { dmWakePacket } from "./fixtures/wake-packets.js";
+import { dmWakePacket, dmRawEvent, unknownRawEvent } from "./fixtures/wake-packets.js";
 
 /** A scripted Event Center client: yields the queued update batches, records ACKs + sent DMs. */
 function fakeImClient(batches: UpdatesResult[]): EventCenterClient & { acked: string[]; sent: { to: string; body: string }[] } {
@@ -74,7 +74,7 @@ describe("runBindingOnce", () => {
     const registry = new InMemorySessionRegistry();
     const driver = new FakeDriver({ reply: "hi" });
     const im = fakeImClient([
-      { events: [{ id: "e1", packet: dmWakePacket }], next_cursor: "c2" },
+      { events: [dmRawEvent], next_cursor: "c2" },
     ]);
 
     const cursor = await runBindingOnce({ binding, driver, registry, imClient: im });
@@ -87,12 +87,12 @@ describe("runBindingOnce", () => {
   it("ACKs a non-actionable event without a turn", async () => {
     const registry = new InMemorySessionRegistry();
     const driver = new FakeDriver();
-    // heartbeat wake with no conversation → owner scope; a heartbeat still runs a
-    // turn, so use a genuinely non-actionable packet: unknown schema is skipped.
-    const im = fakeImClient([{ events: [{ id: "e9", packet: { schema: "not.mingle" } }] }]);
+    // An unknown/non-wake event type derives no conversation → dropped + ACKed,
+    // never driving a turn (forward-compatible).
+    const im = fakeImClient([{ events: [unknownRawEvent] }]);
 
     await runBindingOnce({ binding, driver, registry, imClient: im });
-    expect(im.acked).toEqual(["e9"]);
+    expect(im.acked).toEqual(["e_unknown"]);
     expect(im.sent).toEqual([]);
   });
 });

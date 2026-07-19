@@ -10,7 +10,8 @@
  * resumes from the last cursor. NACK/backoff semantics are refined in A2 with a
  * real provider whose turns can fail mid-flight.
  */
-import { parseWakePacket, type WakePacket } from "../protocol/wake-packet.js";
+import type { WakePacket } from "../protocol/wake-packet.js";
+import { buildWakePacket, deriveConversation } from "../protocol/wake-adapter.js";
 import { deriveScopeKey } from "../protocol/scope.js";
 import type { AgentRuntimeDriver, ProviderSession, RuntimeEvent } from "./driver.js";
 import type { RuntimeKind, SessionRegistry } from "./session-registry.js";
@@ -23,9 +24,12 @@ export type Binding = {
   runtimeKind: RuntimeKind;
 };
 
-/** A single Event Center update: the durable event id + its Wake Packet payload. */
-export type EventUpdate = { id: string; packet: unknown };
-export type UpdatesResult = { events: EventUpdate[]; next_cursor?: string };
+/** A raw Event Center event as returned by `GET /v1/event-center/updates`
+ *  (`{id, type, payload}`). The runtime builds the Wake Packet from it locally via
+ *  the wake-adapter — im-server does NOT pre-build the packet (matches how
+ *  mingle-hosted-agent consumes the same stream). */
+export type RawAccountEvent = { id: string; type: string; payload?: Record<string, unknown> };
+export type UpdatesResult = { events: RawAccountEvent[]; next_cursor?: string };
 
 /** The minimal Event Center surface the loop needs (learned from the reference
  *  connector's ImClient, re-implemented here — nothing imported from openclaw-mingle). */
@@ -121,13 +125,18 @@ async function deliverReply(
   const target = packet.conversation?.reply_target;
   if (!target) return "unsupported";
   switch (target.kind) {
-    case "dm":
-      await imClient.sendDm(target.peer_id, reply);
+    case "dm": {
+      const r = await imClient.sendDm(target.peer_id, reply);
+      // A failed send (403/500/…) must NOT be treated as delivered — throw so the
+      // caller NACKs (backoff + redelivery) instead of ACKing a lost reply (P0-b).
+      if (!r.ok) throw new Error(`dm delivery failed (status ${r.status})`);
       return "delivered";
+    }
     case "channel": {
       const slug = channelSlugFromEvent(packet);
       if (!slug) return "unsupported";
-      await imClient.postToChannel(slug, reply);
+      const r = await imClient.postToChannel(slug, reply);
+      if (!r.ok) throw new Error(`channel delivery failed (status ${r.status})`);
       return "delivered";
     }
     default:
@@ -171,35 +180,43 @@ export async function runBindingOnce(input: {
 
   const ackIds: string[] = [];
   let gapped = false;
-  for (const update of events) {
-    let parsed: WakePacket | undefined;
-    try {
-      parsed = parseWakePacket(update.packet);
-    } catch {
-      ackIds.push(update.id); // not a valid Mingle wake — safe to drop
+  for (const raw of events) {
+    // Build the Wake Packet from the raw event locally (im-server returns raw
+    // `{id,type,payload}`, never a pre-built packet). An event that derives no
+    // conversation (heartbeat/notification-only or an unknown future type) is not
+    // an actionable turn for this binding → drop + ACK (forward-compatible).
+    const conversation = deriveConversation({ id: raw.id, type: raw.type, payload: raw.payload });
+    if (!conversation) {
+      ackIds.push(raw.id);
       continue;
     }
+    const packet: WakePacket = buildWakePacket(
+      { account_id: binding.agentAccountId, agent_kind: "local" },
+      { kind: "event", event: { id: raw.id, type: raw.type, payload: raw.payload } },
+      [],
+      raw.id,
+    );
 
     try {
-      const result = await processWake({ packet: parsed, binding, driver, registry, imClient });
+      const result = await processWake({ packet, binding, driver, registry, imClient });
       if (result.events.some((e) => e.type === "turn.failed")) {
         // Transient turn failure → NACK for backoff, stop draining (P0-3).
         const reason = failureReason(result.events);
-        await imClient.nack(update.id, reason);
+        await imClient.nack(raw.id, reason);
         gapped = true;
         break;
       }
       if (result.delivery === "unsupported") {
-        // The turn produced a reply we couldn't route (unsupported target kind).
-        // NACK rather than silently ACK — the reply must not vanish (P1-3).
-        await imClient.nack(update.id, `unsupported reply target (${result.scopeKey})`);
+        // The turn produced a reply we couldn't route (e.g. a channel wake with no
+        // recoverable slug). NACK rather than silently ACK — the reply must not vanish (P1-3).
+        await imClient.nack(raw.id, `unsupported reply target (${result.scopeKey})`);
         gapped = true;
         break;
       }
-      ackIds.push(update.id); // handled successfully → ACK
+      ackIds.push(raw.id); // handled + delivered successfully → ACK
     } catch (err) {
-      // A thrown error (provider crash / network) is also transient → NACK + stop.
-      await imClient.nack(update.id, err instanceof Error ? err.message : String(err));
+      // A thrown error (provider crash / network / failed delivery) is transient → NACK + stop.
+      await imClient.nack(raw.id, err instanceof Error ? err.message : String(err));
       gapped = true;
       break;
     }

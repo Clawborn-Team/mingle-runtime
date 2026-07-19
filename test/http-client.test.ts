@@ -23,12 +23,14 @@ const base = { imUrl: "https://relay.test/", key: "k_secret", consumerId: "mingl
 
 describe("HttpEventCenterClient", () => {
   it("getUpdates issues a Bearer + consumer-id long-poll and parses events/next_cursor", async () => {
+    const rawEvent = { id: "e1", type: "dm.message.created", payload: { conversation: { peer_id: "p1" } } };
     const { impl, calls } = fakeFetch({
-      "/v1/event-center/updates": { status: 200, body: { events: [{ id: "e1", packet: { a: 1 } }], next_cursor: "c2" } },
+      "/v1/event-center/updates": { status: 200, body: { events: [rawEvent], next_cursor: "c2" } },
     });
     const client = createHttpEventCenterClient({ ...base, fetchImpl: impl });
     const res = await client.getUpdates({ cursor: "c1", wait: 1000 });
-    expect(res).toEqual({ events: [{ id: "e1", packet: { a: 1 } }], next_cursor: "c2" });
+    // returns the raw {id,type,payload} events verbatim — the consumer builds the packet
+    expect(res).toEqual({ events: [rawEvent], next_cursor: "c2" });
     const call = calls[0]!;
     expect(call.url).toContain("/v1/event-center/updates");
     expect(call.url).toContain("wait=1000");

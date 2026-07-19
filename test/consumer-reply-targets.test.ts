@@ -3,7 +3,7 @@ import { runBindingOnce, processWake, type EventCenterClient, type UpdatesResult
 import { InMemorySessionRegistry } from "../src/runtime/session-registry.js";
 import { FakeDriver } from "../src/runtime/fake-driver.js";
 import { parseWakePacket } from "../src/protocol/wake-packet.js";
-import { channelMentionWakePacket, unsupportedTargetWakePacket } from "./fixtures/wake-packets.js";
+import { channelMentionWakePacket, channelRawEventNoSlug, dmRawEvent } from "./fixtures/wake-packets.js";
 
 function fakeIm(batches: UpdatesResult[]) {
   const queue = [...batches];
@@ -74,17 +74,30 @@ describe("reply-target delivery (P1-3)", () => {
     expect(driver.openedScopes).toEqual(["channel:ch9"]); // opened once, then resumed
   });
 
-  it("NACKs an unsupported reply target instead of silently ACKing (P1-3 acceptance)", async () => {
+  it("NACKs a channel wake with no recoverable slug instead of silently ACKing (P1-3)", async () => {
     const registry = new InMemorySessionRegistry();
     const driver = new FakeDriver({ reply: "done" });
-    const im = fakeIm([{ events: [{ id: "e7", packet: unsupportedTargetWakePacket }] }]);
+    const im = fakeIm([{ events: [channelRawEventNoSlug] }]);
 
     await runBindingOnce({ binding, driver, registry, imClient: im });
 
-    // the turn "succeeded" but the reply could not be delivered → NACK, not ACK
-    expect(im.nacked.map((n) => n.id)).toEqual(["e7"]);
-    expect(im.acked).not.toContain("e7");
+    // the turn "succeeded" but the reply could not be routed (no slug) → NACK, not ACK
+    expect(im.nacked.map((n) => n.id)).toEqual(["e_ch_noslug"]);
+    expect(im.acked).not.toContain("e_ch_noslug");
     expect(im.dms).toEqual([]);
     expect(im.posts).toEqual([]);
+  });
+
+  it("NACKs (does NOT ACK) when the DM send itself fails — the reply must not vanish (P0-b)", async () => {
+    const registry = new InMemorySessionRegistry();
+    const driver = new FakeDriver({ reply: "hi" });
+    const im = fakeIm([{ events: [dmRawEvent] }]);
+    // Make the DM send fail (e.g. 403/500).
+    im.sendDm = async () => ({ ok: false, status: 500 });
+
+    await runBindingOnce({ binding, driver, registry, imClient: im });
+
+    expect(im.nacked.map((n) => n.id)).toEqual(["e1"]);
+    expect(im.acked).not.toContain("e1");
   });
 });

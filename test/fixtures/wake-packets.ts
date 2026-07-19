@@ -99,3 +99,24 @@ export const forwardCompatWakePacket = {
   ...dmWakePacket,
   future_field: { anything: true },
 } as const;
+
+/**
+ * RAW Event Center events (`{id,type,payload}`) as GET /v1/event-center/updates
+ * actually returns them — the runtime builds the Wake Packet from these locally.
+ * Derived from the packet fixtures above so the two never drift.
+ */
+export const dmRawEvent = dmWakePacket.wake.event;
+export const channelRawEvent = channelMentionWakePacket.wake.event;
+/** A channel mention MISSING channel_slug → the runtime can derive scope but has no
+ *  slug to post the reply to → delivery is "unsupported" (NACK, not a wrong post). */
+export const channelRawEventNoSlug = {
+  id: "e_ch_noslug",
+  type: "channel.mention.created",
+  payload: { conversation: { kind: "group", channel_id: "chX" }, message: { id: "m", body: "@小龙 hi", seq: 1 } },
+} as const;
+/** An unknown/non-actionable event type → derives no conversation → dropped + ACKed. */
+export const unknownRawEvent = {
+  id: "e_unknown",
+  type: "some.future.event.v9",
+  payload: { anything: true },
+} as const;
