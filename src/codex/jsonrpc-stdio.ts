@@ -27,6 +27,7 @@ type RpcMessage = {
 export class JsonRpcStdioConnection {
   private readonly write: WriteLine;
   private buffer = "";
+  private draining = false;
   private nextId = 1;
   private readonly pending = new Map<number | string, Pending>();
   private notificationHandler?: NotificationHandler;
@@ -60,14 +61,23 @@ export class JsonRpcStdioConnection {
     this.send({ method, params });
   }
 
-  /** Feed raw bytes/chunks from the peer; reassembles JSONL lines. */
+  /** Feed raw bytes/chunks from the peer; reassembles JSONL lines.
+   *  Re-entrancy-safe: a handler that writes back (which, over an in-memory peer,
+   *  re-enters `receive`) appends to the buffer; only the outermost call drains it,
+   *  so the shared buffer is never sliced out from under a nested call. */
   receive(chunk: string): void {
     this.buffer += chunk;
-    let nl: number;
-    while ((nl = this.buffer.indexOf("\n")) >= 0) {
-      const line = this.buffer.slice(0, nl).trim();
-      this.buffer = this.buffer.slice(nl + 1);
-      if (line) this.dispatch(line);
+    if (this.draining) return;
+    this.draining = true;
+    try {
+      let nl: number;
+      while ((nl = this.buffer.indexOf("\n")) >= 0) {
+        const line = this.buffer.slice(0, nl).trim();
+        this.buffer = this.buffer.slice(nl + 1);
+        if (line) this.dispatch(line);
+      }
+    } finally {
+      this.draining = false;
     }
   }
 
