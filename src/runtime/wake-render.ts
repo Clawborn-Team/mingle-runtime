@@ -17,8 +17,16 @@
  */
 import type { AccountNotification, ReplyTarget, WakeEvent, WakePacket } from "../protocol/wake-packet.js";
 
-export function renderWakeInput(packet: WakePacket): string {
+export function renderWakeInput(packet: WakePacket, persona?: string): string {
   const lines: string[] = [];
+
+  // Persona preamble (spec §5): frame the turn so the model answers AS this Mingle
+  // agent, not "as Codex / an AI assistant". Optional so pure-protocol tests stay stable.
+  if (persona && persona.trim()) {
+    lines.push("## Who you are");
+    lines.push(persona.trim());
+    lines.push("");
+  }
 
   lines.push(`[Mingle wake · agent ${packet.agent.account_id} (${packet.agent.agent_kind}) · trace ${packet.trace_id}]`);
   lines.push("");

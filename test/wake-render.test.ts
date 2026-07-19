@@ -20,6 +20,19 @@ describe("renderWakeInput (P1-5 — one trusted Wake Packet → provider input)"
     expect(text).toContain("dm:p1");
     // it is NOT reduced to just the body
     expect(text).not.toBe("hi 小龙");
+    // no persona preamble unless one is passed
+    expect(text).not.toContain("Who you are");
+  });
+
+  it("prepends the persona preamble when one is given (so the model answers AS this agent)", () => {
+    const persona = "You are a Mingle Local Agent — a private agent acting on your owner's behalf.";
+    const text = renderWakeInput(parseWakePacket(dmWakePacket), persona);
+    expect(text).toContain("## Who you are");
+    expect(text).toContain(persona);
+    // persona comes BEFORE the wake block
+    expect(text.indexOf(persona)).toBeLessThan(text.indexOf("[Mingle wake"));
+    // the event is still rendered
+    expect(text).toContain("hi 小龙");
   });
 
   it("renders a channel @-mention: channel scope + reply target preserved", () => {

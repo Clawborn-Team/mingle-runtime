@@ -20,6 +20,7 @@ import type { AgentRuntimeDriver } from "./driver.js";
 import type { EventCenterClient } from "./consumer.js";
 import type { InstalledBinding, RuntimeConfig } from "../install/config.js";
 import { createHttpEventCenterClient } from "../im/http-client.js";
+import { DEFAULT_LOCAL_AGENT_PERSONA } from "./persona.js";
 import { loadClaudeQuery, buildMingleMcpServer } from "../claude/real-query.js";
 import { spawnCodexAppServer, type SpawnedAppServer } from "../codex/spawn.js";
 import { CodexAppServerClient } from "../codex/client.js";
@@ -56,6 +57,7 @@ export async function resolveInstalledDriver(
           query,
           cwd: ib.dir ?? process.cwd(),
           allowedTools: [],
+          persona: DEFAULT_LOCAL_AGENT_PERSONA,
           ...(mcpServers ? { mcpServers } : {}),
           ...(ib.model ? { model: ib.model } : {}),
         },
@@ -67,7 +69,7 @@ export async function resolveInstalledDriver(
       const client = new CodexAppServerClient(server.connection);
       await client.initialize({ name: "mingle-runtime", version: "0" });
       const driver = resolveDriver("codex", {
-        codex: { client, ...(ib.model ? { model: ib.model } : {}) },
+        codex: { client, persona: DEFAULT_LOCAL_AGENT_PERSONA, ...(ib.model ? { model: ib.model } : {}) },
       });
       return { driver, dispose: () => server.stop() };
     }

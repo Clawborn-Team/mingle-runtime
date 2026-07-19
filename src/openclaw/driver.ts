@@ -26,6 +26,8 @@ import type { OpenClawGateway } from "./gateway.js";
 
 export type OpenClawDriverOptions = {
   gateway: OpenClawGateway;
+  /** Local Agent persona prepended to each turn (so the Gateway agent answers as this agent). */
+  persona?: string;
 };
 
 export class OpenClawDriver implements AgentRuntimeDriver {
@@ -41,9 +43,11 @@ export class OpenClawDriver implements AgentRuntimeDriver {
   };
 
   private readonly gateway: OpenClawGateway;
+  private readonly persona?: string;
 
   constructor(opts: OpenClawDriverOptions) {
     this.gateway = opts.gateway;
+    this.persona = opts.persona;
   }
 
   async probe(): Promise<RuntimeProbe> {
@@ -72,7 +76,7 @@ export class OpenClawDriver implements AgentRuntimeDriver {
     try {
       const result = await this.gateway.runTurn({
         sessionKey: input.session.ref.providerSessionId,
-        input: renderWakeInput(input.packet),
+        input: renderWakeInput(input.packet, this.persona),
         ...(input.signal ? { signal: input.signal } : {}),
       });
       for (const t of result.tools ?? []) {

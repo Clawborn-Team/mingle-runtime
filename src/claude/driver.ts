@@ -39,6 +39,8 @@ export type ClaudeDriverOptions = {
   model?: string;
   /** Tools the model may never run regardless of allowedTools (deny-list). */
   deniedTools?: string[];
+  /** Local Agent persona prepended to each turn (so Claude answers as this agent). */
+  persona?: string;
 };
 
 const DEFAULT_DENIED = ["Bash"];
@@ -91,7 +93,7 @@ export class ClaudeAgentDriver implements AgentRuntimeDriver {
   }
 
   private async *streamTurn(input: RunTurnInput): AsyncIterable<RuntimeEvent> {
-    const prompt = renderWakeInput(input.packet);
+    const prompt = renderWakeInput(input.packet, this.opts.persona);
     const turnId = `turn-${input.session.ref.providerSessionId}-${Date.now()}`;
     yield { type: "turn.started", turnId };
 

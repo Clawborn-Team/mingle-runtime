@@ -29,6 +29,8 @@ export type CodexDriverOptions = {
   approvalPolicy?: ApprovalPolicy;
   sandboxPolicy?: SandboxPolicy;
   model?: string;
+  /** Local Agent persona prepended to each turn (so codex answers as this agent). */
+  persona?: string;
 };
 
 /** A queue that turns pushed events into an async-iterable pull stream. */
@@ -132,7 +134,7 @@ export class CodexAppServerDriver implements AgentRuntimeDriver {
   }
 
   private async driveTurn(input: RunTurnInput, queue: EventQueue): Promise<void> {
-    const text = renderWakeInput(input.packet);
+    const text = renderWakeInput(input.packet, this.opts.persona);
     this.currentThreadId = input.session.ref.providerSessionId;
     this.assembledText = "";
     this.finalText = "";
