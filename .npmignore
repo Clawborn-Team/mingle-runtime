@@ -1,0 +1,10 @@
+# Ship the compiled dist/ (see package.json "files"), not the sources. Its presence
+# also stops npm from falling back to .gitignore (which ignores dist/) when packing.
+src
+test
+tsconfig.json
+tsconfig.build.json
+vitest.config.ts
+*.tsbuildinfo
+.mingle
+.DS_Store
