@@ -36,7 +36,13 @@ export interface EventCenterClient {
    *  dead-letters it (mirrors im-server's per-event delivery discipline). */
   nack(eventId: string, reason: string): Promise<void>;
   sendDm(to: string, body: string): Promise<{ ok: boolean; status: number }>;
+  /** Post a reply back to a channel (group/plaza @ + follow-up, P1-3). */
+  postToChannel(channelId: string, body: string): Promise<{ ok: boolean; status: number }>;
 }
+
+/** Whether a turn's reply reached its target. `unsupported` means the reply
+ *  target kind has no delivery route yet — the caller must NACK, not ACK. */
+export type ReplyDelivery = "delivered" | "none" | "unsupported";
 
 export type ProcessWakeInput = {
   packet: WakePacket;
@@ -51,6 +57,8 @@ export type ProcessWakeResult = {
   session: ProviderSession;
   events: RuntimeEvent[];
   reply?: string;
+  /** How the reply was delivered — `unsupported` means the target has no route. */
+  delivery: ReplyDelivery;
 };
 
 /** Open-or-resume the session for this (binding, scope), then run one turn. */
@@ -89,16 +97,35 @@ export async function processWake(input: ProcessWakeInput): Promise<ProcessWakeR
     health: events.some((e) => e.type === "turn.failed") ? "error" : "ok",
   });
 
-  if (reply) await deliverReply(packet, reply, imClient);
+  const delivery = reply ? await deliverReply(packet, reply, imClient) : "none";
 
-  return { scopeKey, session, events, reply };
+  return { scopeKey, session, events, reply, delivery };
 }
 
-/** Deliver a turn's reply to the wake's reply target. A1 handles the dm target
- *  (channel/owner/task posting is a later Action). */
-async function deliverReply(packet: WakePacket, reply: string, imClient: EventCenterClient): Promise<void> {
+/**
+ * Deliver a turn's reply to the wake's reply target. DM → sendDm; channel (group
+ * / plaza @ + follow-up, P1-3) → postToChannel. A target kind we can't route yet
+ * returns `unsupported` so the caller NACKs instead of silently dropping the
+ * reply (owner/task Actions land in a later increment).
+ */
+async function deliverReply(
+  packet: WakePacket,
+  reply: string,
+  imClient: EventCenterClient,
+): Promise<ReplyDelivery> {
   const target = packet.conversation?.reply_target;
-  if (target?.kind === "dm") await imClient.sendDm(target.peer_id, reply);
+  if (!target) return "unsupported";
+  switch (target.kind) {
+    case "dm":
+      await imClient.sendDm(target.peer_id, reply);
+      return "delivered";
+    case "channel":
+      await imClient.postToChannel(target.channel_id, reply);
+      return "delivered";
+    default:
+      // owner/task have no delivery route yet — do NOT pretend it was handled.
+      return "unsupported";
+  }
 }
 
 /**
@@ -145,6 +172,13 @@ export async function runBindingOnce(input: {
         // Transient turn failure → NACK for backoff, stop draining (P0-3).
         const reason = failureReason(result.events);
         await imClient.nack(update.id, reason);
+        gapped = true;
+        break;
+      }
+      if (result.delivery === "unsupported") {
+        // The turn produced a reply we couldn't route (unsupported target kind).
+        // NACK rather than silently ACK — the reply must not vanish (P1-3).
+        await imClient.nack(update.id, `unsupported reply target (${result.scopeKey})`);
         gapped = true;
         break;
       }

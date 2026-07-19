@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { deriveScopeKey } from "../src/protocol/scope.js";
 import type { WakePacket } from "../src/protocol/wake-packet.js";
-import { dmWakePacket, heartbeatWakePacket } from "./fixtures/wake-packets.js";
+import { dmWakePacket, heartbeatWakePacket, channelMentionWakePacket } from "./fixtures/wake-packets.js";
 
 function withConversation(scope: WakePacket["conversation"]): WakePacket {
   return { ...(dmWakePacket as unknown as WakePacket), conversation: scope };
@@ -10,6 +10,12 @@ function withConversation(scope: WakePacket["conversation"]): WakePacket {
 describe("deriveScopeKey (§4.3)", () => {
   it("uses the dm scope_id from a dm wake", () => {
     expect(deriveScopeKey(dmWakePacket as unknown as WakePacket, { ownerAccountId: "o1" })).toBe("dm:p1");
+  });
+
+  it("uses the channel scope from a real group-@ wake fixture (P1-3)", () => {
+    expect(deriveScopeKey(channelMentionWakePacket as unknown as WakePacket, { ownerAccountId: "o1" })).toBe(
+      "channel:ch9",
+    );
   });
 
   it("derives channel / owner / task scope keys", () => {

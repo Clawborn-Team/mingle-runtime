@@ -26,6 +26,9 @@ function fakeImClient(batches: UpdatesResult[]): EventCenterClient & { acked: st
       sent.push({ to, body });
       return { ok: true, status: 201 };
     },
+    async postToChannel() {
+      return { ok: true, status: 201 };
+    },
   };
 }
 

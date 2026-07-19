@@ -26,6 +26,9 @@ function fakeIm(batches: UpdatesResult[]) {
       sent.push({ to, body });
       return { ok: true, status: 201 };
     },
+    async postToChannel() {
+      return { ok: true, status: 201 };
+    },
   };
   return im;
 }

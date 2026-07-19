@@ -84,10 +84,27 @@ Shipped in A3 (spec §5.5 + the same hardening bar as A2):
   SDK is installed AND auth env is present; auto-skips otherwise (honest degrade).
   `claude -p` remains diagnostics-only.
 
+## Codex review hardening (P1-5, P1-3)
+
+- **P1-5 — one trusted Wake Packet → provider input** (`src/runtime/wake-render.ts`):
+  a single runtime-layer renderer used by BOTH drivers. It separates the immediate
+  event from notifications (framed as CONTEXT, not commands), preserves source +
+  reply metadata + trace, and renders a heartbeat as a periodic wake with its
+  background activity (never the bare `(heartbeat)`). Driver tests inspect the
+  ACTUAL App Server turn input / SDK prompt for DM, channel-@, and heartbeat+
+  notifications fixtures.
+- **P1-3 — group/@ channel scope + reply** (`src/protocol/scope.ts`,
+  `src/runtime/consumer.ts`): channel wakes resume a stable `channel:<id>` session
+  and `deliverReply()` posts back to the channel via `postToChannel`. An
+  UNSUPPORTED reply target (e.g. task) NACKs instead of silently ACKing, so the
+  reply is never lost.
+
 ## Next
 
 - **A4** — OpenClaw adapter + unified install/UI (+ rewrite the stale bind-agent
   UI copy that still says "常驻连接器 headless 驱动").
+- **P1-2 (held)** — replace the hand-copied Wake Packet builder with the shared
+  schema-versioned adapter + cross-repo fixtures once the team-lead publishes them.
 
 ## Dev
 
