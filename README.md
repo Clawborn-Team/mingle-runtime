@@ -60,11 +60,34 @@ Shipped in A2 (spec §5.4 + the two carry-forward requirements):
   stdio; a smoke test runs against it when `codex` is on PATH (else skipped).
   `codex exec` remains diagnostics-only.
 
+## Status — Increment A3 (Claude Agent SDK driver)
+
+Shipped in A3 (spec §5.5 + the same hardening bar as A2):
+
+- **Honest auth** (`src/claude/auth.ts`) — `probe()` reports only REAL configured
+  credentials (Anthropic API key / Bedrock / Vertex); when none is set it says so
+  and names the env vars, and NEVER implies claude.ai subscription reuse (§5.5).
+- **`ClaudeAgentDriver`** (`src/claude/driver.ts`) — drives the SDK `query()`;
+  maps its message stream (system/assistant/result) → `RuntimeEvent`. Resumes a
+  scope by **explicit `session_id`** (`resume: <id>`) — never `continue: true`
+  (no "most-recent-in-cwd" guessing). `canUseTool` enforces a deny-list +
+  allow-list (PreToolUse-style); Mingle capabilities ride an in-process SDK-MCP
+  server so the model never holds a long-lived Agent credential (§10).
+- **Dependency-free core** — the driver takes an injected structural `QueryFn`
+  (`src/claude/sdk-types.ts`), unit-tested via `FakeClaudeQuery`. The real SDK is
+  a DYNAMIC import (`src/claude/real-query.ts`) + an **optional** dependency, so
+  the core builds/tests without it.
+- **Restart-recovery** (`test/claude-restart-recovery.test.ts`) — SQLite-persisted
+  `session_id` is resumed by a fresh process via `resume` (spy-verified), no new
+  session. Two scopes → two distinct session_ids.
+- **Real-SDK smoke** (`test/claude-smoke.test.ts`) — runs one real turn when the
+  SDK is installed AND auth env is present; auto-skips otherwise (honest degrade).
+  `claude -p` remains diagnostics-only.
+
 ## Next
 
-- **A3** — Claude Agent SDK driver (explicit session_id + resume, in-process
-  SDK-MCP Mingle tools, `PreToolUse` permissions, honest auth surfacing).
-- **A4** — OpenClaw adapter + unified install/UI.
+- **A4** — OpenClaw adapter + unified install/UI (+ rewrite the stale bind-agent
+  UI copy that still says "常驻连接器 headless 驱动").
 
 ## Dev
 
