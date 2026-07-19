@@ -30,12 +30,21 @@ export function createHttpEventCenterClient(cfg: HttpClientConfig): EventCenterC
   }
 
   return {
-    async getUpdates({ cursor, wait = 25000 }): Promise<UpdatesResult> {
+    async getUpdates({ cursor, wait = 25000, digest = false }): Promise<UpdatesResult> {
       const qs = new URLSearchParams({ wait: String(wait) });
       if (cursor) qs.set("cursor", cursor);
+      if (digest) qs.set("digest", "true"); // return pending notifications even with no wake event
       const res = await doFetch(`${base}/v1/event-center/updates?${qs}`, { headers: consumerHeaders });
-      const json = (await res.json().catch(() => ({}))) as { events?: unknown[]; next_cursor?: string };
-      return { events: (json.events ?? []) as UpdatesResult["events"], next_cursor: json.next_cursor };
+      const json = (await res.json().catch(() => ({}))) as {
+        events?: unknown[];
+        notifications?: unknown[];
+        next_cursor?: string;
+      };
+      return {
+        events: (json.events ?? []) as UpdatesResult["events"],
+        notifications: (json.notifications ?? []) as UpdatesResult["notifications"],
+        next_cursor: json.next_cursor,
+      };
     },
 
     async ack(eventIds) {

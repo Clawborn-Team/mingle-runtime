@@ -30,7 +30,7 @@ describe("HttpEventCenterClient", () => {
     const client = createHttpEventCenterClient({ ...base, fetchImpl: impl });
     const res = await client.getUpdates({ cursor: "c1", wait: 1000 });
     // returns the raw {id,type,payload} events verbatim — the consumer builds the packet
-    expect(res).toEqual({ events: [rawEvent], next_cursor: "c2" });
+    expect(res).toEqual({ events: [rawEvent], notifications: [], next_cursor: "c2" });
     const call = calls[0]!;
     expect(call.url).toContain("/v1/event-center/updates");
     expect(call.url).toContain("wait=1000");
@@ -43,7 +43,7 @@ describe("HttpEventCenterClient", () => {
   it("getUpdates tolerates a missing body (empty events)", async () => {
     const { impl } = fakeFetch({ "/v1/event-center/updates": { status: 200 } });
     const client = createHttpEventCenterClient({ ...base, fetchImpl: impl });
-    expect(await client.getUpdates({})).toEqual({ events: [], next_cursor: undefined });
+    expect(await client.getUpdates({})).toEqual({ events: [], notifications: [], next_cursor: undefined });
   });
 
   it("ack POSTs event_ids (no-op on empty)", async () => {

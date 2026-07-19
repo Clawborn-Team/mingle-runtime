@@ -29,12 +29,12 @@ export type Binding = {
  *  the wake-adapter — im-server does NOT pre-build the packet (matches how
  *  mingle-hosted-agent consumes the same stream). */
 export type RawAccountEvent = { id: string; type: string; payload?: Record<string, unknown> };
-export type UpdatesResult = { events: RawAccountEvent[]; next_cursor?: string };
+export type UpdatesResult = { events: RawAccountEvent[]; notifications?: RawAccountEvent[]; next_cursor?: string };
 
 /** The minimal Event Center surface the loop needs (learned from the reference
  *  connector's ImClient, re-implemented here — nothing imported from openclaw-mingle). */
 export interface EventCenterClient {
-  getUpdates(opts: { cursor?: string; wait?: number }): Promise<UpdatesResult>;
+  getUpdates(opts: { cursor?: string; wait?: number; digest?: boolean }): Promise<UpdatesResult>;
   ack(eventIds: string[]): Promise<void>;
   /** Negative-ack a single event so the Event Center backs it off + eventually
    *  dead-letters it (mirrors im-server's per-event delivery discipline). */
@@ -232,4 +232,35 @@ export async function runBindingOnce(input: {
 function failureReason(events: RuntimeEvent[]): string {
   const failed = events.find((e) => e.type === "turn.failed");
   return failed && "error" in failed ? failed.error : "turn failed";
+}
+
+/**
+ * Digest heartbeat (spec §4 / mirrors the Hosted service's digest). Poll the Event
+ * Center with `digest=true` (no wait): the server returns pending NOTIFICATIONS even
+ * when there is no immediate wake event. If any exist, drive ONE heartbeat turn that
+ * carries them as background context, so notification-only activity (a channel
+ * follow-up, an ambient opportunity) still periodically wakes the Local Agent. It
+ * consumes/acks NOTHING — event draining + cursor stay with the drain loop — so it is
+ * safe to run on the same consumer. Returns whether a heartbeat turn was driven.
+ */
+export async function runDigestOnce(input: {
+  binding: Binding;
+  driver: AgentRuntimeDriver;
+  registry: SessionRegistry;
+  imClient: EventCenterClient;
+}): Promise<boolean> {
+  const { binding, driver, registry, imClient } = input;
+  const { notifications } = await imClient.getUpdates({ wait: 0, digest: true });
+  if (!notifications || notifications.length === 0) return false;
+
+  const packet = buildWakePacket(
+    { account_id: binding.agentAccountId, agent_kind: "local" },
+    { kind: "heartbeat" },
+    notifications.map((n) => ({ id: n.id, type: n.type, payload: n.payload })),
+    `digest-${Date.now()}`,
+  );
+  // A heartbeat has no reply target; the turn may act via tools but delivery is
+  // "none"/"unsupported" — we neither ack nor nack (the drain loop owns events).
+  await processWake({ packet, binding, driver, registry, imClient });
+  return true;
 }

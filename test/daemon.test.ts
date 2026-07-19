@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { runBindingLoop, startDaemon, toBinding } from "../src/runtime/daemon.js";
+import { runDigestOnce } from "../src/runtime/consumer.js";
 import { InMemorySessionRegistry } from "../src/runtime/session-registry.js";
 import { FakeDriver } from "../src/runtime/fake-driver.js";
 import type { Binding, EventCenterClient, UpdatesResult } from "../src/runtime/consumer.js";
@@ -44,6 +45,32 @@ describe("toBinding", () => {
       ownerAccountId: "agent_x",
       runtimeKind: "claude-code",
     });
+  });
+});
+
+describe("runDigestOnce (digest heartbeat)", () => {
+  it("drives a heartbeat turn (owner scope) when notifications are pending", async () => {
+    const registry = new InMemorySessionRegistry();
+    const driver = new FakeDriver({ reply: "noted" });
+    const im = fakeIm([]);
+    im.getUpdates = async () => ({
+      events: [],
+      notifications: [{ id: "n1", type: "channel.followup.created", payload: { summary: "3 新消息" } }],
+    });
+    const drove = await runDigestOnce({ binding, driver, registry, imClient: im });
+    expect(drove).toBe(true);
+    expect(driver.openedScopes).toEqual(["owner:a1"]); // heartbeat maps to the owner scope
+    expect(im.acked).toEqual([]); // digest consumes/acks nothing — drain owns events
+  });
+
+  it("does nothing (no turn) when there are no pending notifications", async () => {
+    const registry = new InMemorySessionRegistry();
+    const driver = new FakeDriver();
+    const im = fakeIm([]);
+    im.getUpdates = async () => ({ events: [], notifications: [] });
+    const drove = await runDigestOnce({ binding, driver, registry, imClient: im });
+    expect(drove).toBe(false);
+    expect(driver.openedScopes).toEqual([]);
   });
 });
 
