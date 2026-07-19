@@ -7,3 +7,6 @@ dist/
 
 # packed release tarballs
 *.tgz
+
+# local probe/debug scripts
+tmp/
