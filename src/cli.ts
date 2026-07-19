@@ -72,6 +72,14 @@ export async function runCli(argv: string[], deps: CliDeps = {}): Promise<number
     const start = deps.startRuntime ?? (await defaultStartRuntime());
     log(`starting mingle-runtime for ${cfg.bindings.length} binding(s)…`);
     const handle = await start(cfg);
+    // Clean shutdown: on SIGINT/SIGTERM, stop the daemon so its disposers tear down
+    // the spawned provider processes (codex app-server) instead of orphaning them.
+    const shutdown = () => {
+      log("shutting down mingle-runtime…");
+      void Promise.resolve(handle.stop()).finally(() => process.exit(0));
+    };
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
     await handle.done; // runs until the process is signalled
     return 0;
   }
