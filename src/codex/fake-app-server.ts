@@ -9,7 +9,7 @@
 import { randomUUID } from "node:crypto";
 import type { JsonRpcStdioConnection } from "./jsonrpc-stdio.js";
 
-export type FakeScript = "reply" | "approval-then-complete" | "fail" | "await-interrupt";
+export type FakeScript = "reply" | "approval-then-complete" | "fail" | "await-interrupt" | "no-delta";
 
 export type FakeAppServerOptions = {
   reply?: string;
@@ -114,7 +114,11 @@ export class FakeAppServer {
 
     const itemId = `item_${randomUUID()}`;
     this.notify("item/started", { item: { id: itemId, type: "agentMessage" } });
-    this.notify("item/agentMessage/delta", { itemId, delta: this.reply });
+    // "no-delta" reproduces a real Codex turn whose final answer arrives ONLY via
+    // item/completed (no streamed deltas) — the driver must still capture the reply.
+    if (this.script !== "no-delta") {
+      this.notify("item/agentMessage/delta", { itemId, delta: this.reply });
+    }
     this.notify("item/completed", { item: { id: itemId, type: "agentMessage", text: this.reply } });
     this.notify("turn/completed", { turn: { id: turnId, threadId, status: "completed" } });
   }

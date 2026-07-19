@@ -135,6 +135,7 @@ export class CodexAppServerDriver implements AgentRuntimeDriver {
     const text = renderWakeInput(input.packet);
     this.currentThreadId = input.session.ref.providerSessionId;
     this.assembledText = "";
+    this.finalText = "";
     const off = this.codex.onNotification((method, params) => {
       const p = (params ?? {}) as Record<string, any>;
       switch (method) {
@@ -154,7 +155,12 @@ export class CodexAppServerDriver implements AgentRuntimeDriver {
           }
           break;
         case "item/completed":
-          if (p.item?.type === "commandExecution" || p.item?.type === "mcpToolCall") {
+          if (p.item?.type === "agentMessage" && typeof p.item?.text === "string" && p.item.text.trim()) {
+            // The AUTHORITATIVE final answer. Streaming deltas are a nicety and can
+            // be missed/absent (the model may produce the answer without streaming);
+            // item/completed always carries the full text. Take the last one.
+            this.finalText = p.item.text;
+          } else if (p.item?.type === "commandExecution" || p.item?.type === "mcpToolCall") {
             queue.push({ type: "tool.completed", turnId: this.currentTurnId ?? "", toolId: p.item.id, ok: p.item.approved !== false });
           }
           break;
@@ -174,7 +180,8 @@ export class CodexAppServerDriver implements AgentRuntimeDriver {
       this.currentTurnId = turn.turnId;
       const result = await turn.completed;
       if (result.status === "completed") {
-        queue.push({ type: "turn.completed", turnId: turn.turnId, text: this.lastDelta });
+        // Prefer the authoritative item/completed text; fall back to streamed deltas.
+        queue.push({ type: "turn.completed", turnId: turn.turnId, text: this.finalText || this.assembledText || undefined });
       } else {
         queue.push({ type: "turn.failed", turnId: turn.turnId, error: result.error ?? result.status });
       }
@@ -187,11 +194,10 @@ export class CodexAppServerDriver implements AgentRuntimeDriver {
     }
   }
 
-  /** Track the streamed assistant text so turn.completed can carry the reply. */
-  private get lastDelta(): string | undefined {
-    return this.assembledText || undefined;
-  }
+  /** Streamed assistant text (deltas) + the authoritative final answer text from
+   *  item/completed. turn.completed prefers finalText, falling back to deltas. */
   private assembledText = "";
+  private finalText = "";
 
   async approve(input: ApprovalDecision): Promise<void> {
     const resolve = this.pendingApprovals.get(input.approvalId);

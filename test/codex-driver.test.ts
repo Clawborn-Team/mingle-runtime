@@ -61,6 +61,19 @@ describe("CodexAppServerDriver", () => {
     expect((done as any).text).toBe("嗨！");
   });
 
+  it("captures the reply from item/completed even when NO deltas stream (real-codex regression)", async () => {
+    // A real Codex turn can deliver its final answer only via item/completed (the
+    // model didn't stream token deltas). The driver must still carry the reply on
+    // turn.completed — otherwise the runtime delivers an empty reply / drops it.
+    const d = await makeDriver({ script: "no-delta", reply: "你好，我是本地 Agent。" });
+    const session = await d.openSession({ bindingId: "b1", scopeKey: "dm:p1" });
+    const events = await collect(d.runTurn({ session, packet: parseWakePacket(dmWakePacket) }));
+    expect(events.find((e) => e.type === "assistant.delta")).toBeUndefined(); // no deltas emitted
+    const done = events.at(-1);
+    expect(done?.type).toBe("turn.completed");
+    expect((done as any).text).toBe("你好，我是本地 Agent。"); // reply captured from item/completed
+  });
+
   it("surfaces a scripted approval as approval.requested and can approve it", async () => {
     const d = await makeDriver({ script: "approval-then-complete", reply: "done" });
     const session = await d.openSession({ bindingId: "b1", scopeKey: "dm:p1" });

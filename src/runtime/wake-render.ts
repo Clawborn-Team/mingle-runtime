@@ -43,6 +43,12 @@ function renderImmediateEvent(packet: WakePacket): string {
   const convo = packet.conversation;
   const out: string[] = [];
   out.push("## Immediate event — handle this now");
+  out.push(
+    "Write your reply to this event as your FINAL assistant message. The Mingle runtime " +
+      "delivers your final message to the reply target automatically — do NOT try to send it " +
+      "yourself with tools, commands, or an `agent-mail`/email step; just write the reply text.",
+  );
+  out.push("");
   out.push(`- type: ${event.type}`);
 
   const sender = senderOf(event);
