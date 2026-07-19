@@ -4,7 +4,11 @@ import { fakeClaudeQuery, type FakeScript } from "../src/claude/fake-query.js";
 import type { QueryOptions } from "../src/claude/sdk-types.js";
 import type { RuntimeEvent } from "../src/runtime/driver.js";
 import { parseWakePacket } from "../src/protocol/wake-packet.js";
-import { dmWakePacket } from "./fixtures/wake-packets.js";
+import {
+  dmWakePacket,
+  channelMentionWakePacket,
+  heartbeatWithNotificationsPacket,
+} from "./fixtures/wake-packets.js";
 
 async function collect(stream: AsyncIterable<RuntimeEvent>): Promise<RuntimeEvent[]> {
   const out: RuntimeEvent[] = [];
@@ -99,5 +103,41 @@ describe("ClaudeAgentDriver", () => {
     const b = await driver.openSession({ bindingId: "b1", scopeKey: "channel:c9" });
     await collect(driver.runTurn({ session: b, packet: parseWakePacket(dmWakePacket) }));
     expect(a.ref.providerSessionId).not.toBe(b.ref.providerSessionId);
+  });
+
+  // P1-5: the SDK prompt must carry the FULL structured wake, not just the body.
+  function turnPrompt(calls: { prompt: string }[]): string {
+    return calls.find((c) => c.prompt !== "")?.prompt ?? "";
+  }
+
+  it("feeds the structured wake as the SDK prompt for a DM", async () => {
+    const { driver, calls } = makeDriver();
+    const session = await driver.openSession({ bindingId: "b1", scopeKey: "dm:p1" });
+    await collect(driver.runTurn({ session, packet: parseWakePacket(dmWakePacket) }));
+    const prompt = turnPrompt(calls);
+    expect(prompt).toContain("hi 小龙");
+    expect(prompt).toContain("dm.message.created");
+    expect(prompt).toContain("dm:p1");
+  });
+
+  it("feeds the channel scope + reply target as the SDK prompt for a group @", async () => {
+    const { driver, calls } = makeDriver();
+    const session = await driver.openSession({ bindingId: "b1", scopeKey: "channel:ch9" });
+    await collect(driver.runTurn({ session, packet: parseWakePacket(channelMentionWakePacket) }));
+    const prompt = turnPrompt(calls);
+    expect(prompt).toContain("channel.mention.created");
+    expect(prompt).toContain("channel:ch9");
+    expect(prompt).toContain("@小龙 一起爬山吗");
+  });
+
+  it("feeds heartbeat + notifications as context (never the literal (heartbeat))", async () => {
+    const { driver, calls } = makeDriver();
+    const session = await driver.openSession({ bindingId: "b1", scopeKey: "owner:o1" });
+    await collect(driver.runTurn({ session, packet: parseWakePacket(heartbeatWithNotificationsPacket) }));
+    const prompt = turnPrompt(calls);
+    expect(prompt).not.toBe("(heartbeat)");
+    expect(prompt.toLowerCase()).toContain("heartbeat");
+    expect(prompt).toContain("找搭子");
+    expect(prompt.toLowerCase()).toMatch(/context|not (a )?command/);
   });
 });

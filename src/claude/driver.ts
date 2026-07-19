@@ -27,6 +27,7 @@ import type {
 } from "../runtime/driver.js";
 import type { CanUseTool, QueryFn, QueryOptions, SdkMessage } from "./sdk-types.js";
 import { detectClaudeAuth } from "./auth.js";
+import { renderWakeInput } from "../runtime/wake-render.js";
 
 export type ClaudeDriverOptions = {
   query: QueryFn;
@@ -90,7 +91,7 @@ export class ClaudeAgentDriver implements AgentRuntimeDriver {
   }
 
   private async *streamTurn(input: RunTurnInput): AsyncIterable<RuntimeEvent> {
-    const prompt = extractPromptText(input);
+    const prompt = renderWakeInput(input.packet);
     const turnId = `turn-${input.session.ref.providerSessionId}-${Date.now()}`;
     yield { type: "turn.started", turnId };
 
@@ -180,9 +181,4 @@ function sessionIdOf(msg: SdkMessage): string | undefined {
     return (msg as { session_id?: string }).session_id;
   }
   return undefined;
-}
-
-function extractPromptText(input: RunTurnInput): string {
-  const body = (input.packet.wake.event?.payload as { message?: { body?: unknown } } | undefined)?.message?.body;
-  return typeof body === "string" && body.trim() ? body : "(heartbeat)";
 }

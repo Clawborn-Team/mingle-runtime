@@ -10,6 +10,7 @@
  * `codex exec` is NOT used here — it stays a diagnostics-only fallback (§5.4).
  */
 import { CodexAppServerClient, type ApprovalPolicy, type SandboxPolicy } from "./client.js";
+import { renderWakeInput } from "../runtime/wake-render.js";
 import type {
   AgentRuntimeDriver,
   ApprovalDecision,
@@ -131,7 +132,7 @@ export class CodexAppServerDriver implements AgentRuntimeDriver {
   }
 
   private async driveTurn(input: RunTurnInput, queue: EventQueue): Promise<void> {
-    const text = extractPromptText(input);
+    const text = renderWakeInput(input.packet);
     this.currentThreadId = input.session.ref.providerSessionId;
     this.assembledText = "";
     const off = this.codex.onNotification((method, params) => {
@@ -213,10 +214,4 @@ export class CodexAppServerDriver implements AgentRuntimeDriver {
   async shutdown(): Promise<void> {
     // Connection lifecycle is owned by the spawner (A2 real-binary path).
   }
-}
-
-function extractPromptText(input: RunTurnInput): string {
-  const event = input.packet.wake.event;
-  const body = (event?.payload as any)?.message?.body;
-  return typeof body === "string" && body.trim() ? body : "(heartbeat)";
 }

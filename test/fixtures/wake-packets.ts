@@ -28,12 +28,69 @@ export const dmWakePacket = {
   trace_id: "trace-1",
 } as const;
 
+/** A group/plaza @-mention wake. The channel scope + channel reply target mirror
+ *  what im-server's builder emits for channel.mention.created (commit 3eec5d6). */
+export const channelMentionWakePacket = {
+  schema: "mingle.agent-wake.v1",
+  agent: { account_id: "c1", agent_kind: "companion" },
+  wake: {
+    kind: "event",
+    event: {
+      id: "e2",
+      type: "channel.mention.created",
+      payload: {
+        conversation: { kind: "channel", channel_id: "ch9", channel_slug: "找搭子" },
+        message: { id: "m2", body: "@小龙 一起爬山吗", seq: 3, from_username: "alice" },
+      },
+    },
+  },
+  notifications: [],
+  conversation: {
+    scope: "channel",
+    scope_id: "channel:ch9",
+    channel_id: "ch9",
+    reply_target: { kind: "channel", channel_id: "ch9" },
+  },
+  trace_id: "trace-ch",
+} as const;
+
 export const heartbeatWakePacket = {
   schema: "mingle.agent-wake.v1",
   agent: { account_id: "c1", agent_kind: "companion" },
   wake: { kind: "heartbeat" },
   notifications: [],
   trace_id: "trace-hb",
+} as const;
+
+/** A heartbeat wake that carries background notifications (group activity the
+ *  Agent should treat as CONTEXT, not a command). */
+export const heartbeatWithNotificationsPacket = {
+  schema: "mingle.agent-wake.v1",
+  agent: { account_id: "c1", agent_kind: "companion" },
+  wake: { kind: "heartbeat" },
+  notifications: [
+    { id: "n1", type: "channel.message.created", payload: { channel_slug: "找搭子", summary: "3 条新消息" } },
+    { id: "n2", type: "match.suggested", payload: { peer_username: "carol", reason: "都喜欢摄影" } },
+  ],
+  trace_id: "trace-hb2",
+} as const;
+
+/** A wake whose reply target kind the Runtime does not support yet (task) — the
+ *  consumer must NACK, not silently ACK (P1-3 acceptance). */
+export const unsupportedTargetWakePacket = {
+  schema: "mingle.agent-wake.v1",
+  agent: { account_id: "c1", agent_kind: "companion" },
+  wake: {
+    kind: "event",
+    event: { id: "e7", type: "task.assigned", payload: { task: { id: "t7" }, message: { body: "do the thing" } } },
+  },
+  notifications: [],
+  conversation: {
+    scope: "task",
+    scope_id: "task:t7",
+    reply_target: { kind: "task", task_id: "t7" },
+  },
+  trace_id: "trace-task",
 } as const;
 
 /** A packet carrying a top-level field the current parser doesn't know — must be

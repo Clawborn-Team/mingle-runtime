@@ -22,6 +22,9 @@ export class FakeAppServer {
   private readonly script: FakeScript;
   /** threadId → turnId currently interruptible (for await-interrupt). */
   private readonly openTurns = new Map<string, { interrupt: () => void }>();
+  /** The `input` arrays received on turn/start — so tests can inspect the actual
+   *  provider input the driver produced (P1-5 acceptance). */
+  readonly turnInputs: unknown[] = [];
 
   constructor(opts: FakeAppServerOptions = {}) {
     this.reply = opts.reply ?? "ok";
@@ -52,6 +55,7 @@ export class FakeAppServer {
       case "thread/fork":
         return { thread: { id: `thr_${randomUUID()}`, forkedFromId: p.threadId } };
       case "turn/start":
+        this.turnInputs.push(p.input);
         return this.startTurn(p.threadId as string);
       case "turn/interrupt": {
         const open = this.openTurns.get(p.threadId as string);

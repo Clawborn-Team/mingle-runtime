@@ -5,16 +5,32 @@ import { CodexAppServerClient } from "../src/codex/client.js";
 import { CodexAppServerDriver } from "../src/codex/driver.js";
 import type { RuntimeEvent } from "../src/runtime/driver.js";
 import { parseWakePacket } from "../src/protocol/wake-packet.js";
-import { dmWakePacket } from "./fixtures/wake-packets.js";
+import {
+  dmWakePacket,
+  channelMentionWakePacket,
+  heartbeatWithNotificationsPacket,
+} from "./fixtures/wake-packets.js";
 
 async function makeDriver(opts: FakeAppServerOptions = {}) {
+  return (await makeDriverWithServer(opts)).driver;
+}
+
+/** Also expose the FakeAppServer so tests can inspect the actual turn/start input. */
+async function makeDriverWithServer(opts: FakeAppServerOptions = {}) {
   let client!: JsonRpcStdioConnection;
   const serverConn = new JsonRpcStdioConnection({ write: (l) => client.receive(l) });
   client = new JsonRpcStdioConnection({ write: (l) => serverConn.receive(l) });
-  new FakeAppServer(opts).attach(serverConn);
+  const server = new FakeAppServer(opts);
+  server.attach(serverConn);
   const codex = new CodexAppServerClient(client);
   await codex.initialize({ name: "mingle-runtime", version: "0" });
-  return new CodexAppServerDriver({ client: codex });
+  return { driver: new CodexAppServerDriver({ client: codex }), server };
+}
+
+/** Pull the text the driver actually sent as the App Server turn input. */
+function turnInputText(server: FakeAppServer): string {
+  const input = server.turnInputs.at(-1) as Array<{ type: string; text?: string }> | undefined;
+  return (input ?? []).map((b) => b.text ?? "").join("");
 }
 
 async function collect(stream: AsyncIterable<RuntimeEvent>): Promise<RuntimeEvent[]> {
@@ -79,5 +95,38 @@ describe("CodexAppServerDriver", () => {
     const a = await d.openSession({ bindingId: "b1", scopeKey: "dm:p1" });
     const b = await d.openSession({ bindingId: "b1", scopeKey: "channel:c9" });
     expect(a.ref.providerSessionId).not.toBe(b.ref.providerSessionId);
+  });
+
+  // P1-5: the App Server turn input must carry the FULL structured wake, not just
+  // the message body.
+  it("sends the structured wake as the turn input for a DM", async () => {
+    const { driver, server } = await makeDriverWithServer();
+    const session = await driver.openSession({ bindingId: "b1", scopeKey: "dm:p1" });
+    await collect(driver.runTurn({ session, packet: parseWakePacket(dmWakePacket) }));
+    const text = turnInputText(server);
+    expect(text).toContain("hi 小龙");
+    expect(text).toContain("dm.message.created");
+    expect(text).toContain("dm:p1");
+  });
+
+  it("sends the channel scope + reply target in the turn input for a group @", async () => {
+    const { driver, server } = await makeDriverWithServer();
+    const session = await driver.openSession({ bindingId: "b1", scopeKey: "channel:ch9" });
+    await collect(driver.runTurn({ session, packet: parseWakePacket(channelMentionWakePacket) }));
+    const text = turnInputText(server);
+    expect(text).toContain("channel.mention.created");
+    expect(text).toContain("channel:ch9");
+    expect(text).toContain("@小龙 一起爬山吗");
+  });
+
+  it("sends heartbeat + notifications as context (never the literal (heartbeat))", async () => {
+    const { driver, server } = await makeDriverWithServer();
+    const session = await driver.openSession({ bindingId: "b1", scopeKey: "owner:o1" });
+    await collect(driver.runTurn({ session, packet: parseWakePacket(heartbeatWithNotificationsPacket) }));
+    const text = turnInputText(server);
+    expect(text).not.toBe("(heartbeat)");
+    expect(text.toLowerCase()).toContain("heartbeat");
+    expect(text).toContain("找搭子");
+    expect(text.toLowerCase()).toMatch(/context|not (a )?command/);
   });
 });
