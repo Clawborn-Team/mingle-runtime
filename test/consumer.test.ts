@@ -19,6 +19,9 @@ function fakeImClient(batches: UpdatesResult[]): EventCenterClient & { acked: st
     async ack(ids) {
       acked.push(...ids);
     },
+    async nack() {
+      /* not exercised in these happy-path tests */
+    },
     async sendDm(to, body) {
       sent.push({ to, body });
       return { ok: true, status: 201 };

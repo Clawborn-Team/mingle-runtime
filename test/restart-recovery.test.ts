@@ -46,6 +46,7 @@ function noopIm(): EventCenterClient {
       return { events: [] };
     },
     async ack() {},
+    async nack() {},
     async sendDm() {
       return { ok: true, status: 201 };
     },

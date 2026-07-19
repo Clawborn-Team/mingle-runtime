@@ -32,6 +32,9 @@ export type UpdatesResult = { events: EventUpdate[]; next_cursor?: string };
 export interface EventCenterClient {
   getUpdates(opts: { cursor?: string; wait?: number }): Promise<UpdatesResult>;
   ack(eventIds: string[]): Promise<void>;
+  /** Negative-ack a single event so the Event Center backs it off + eventually
+   *  dead-letters it (mirrors im-server's per-event delivery discipline). */
+  nack(eventId: string, reason: string): Promise<void>;
   sendDm(to: string, body: string): Promise<{ ok: boolean; status: number }>;
 }
 
@@ -98,9 +101,19 @@ async function deliverReply(packet: WakePacket, reply: string, imClient: EventCe
   if (target?.kind === "dm") await imClient.sendDm(target.peer_id, reply);
 }
 
-/** Drain exactly one update batch: handle each wake, ACK every event, return the
- *  next cursor. A malformed / non-Mingle packet is skipped but still ACKed (safe
- *  to drop), mirroring the reference loop. */
+/**
+ * Drain exactly one update batch with the same per-event delivery discipline as
+ * im-server's companion runtime (the P0-3 fix — ACK-on-failure loses wakes):
+ *
+ *  - non-actionable / unparseable packet → drop + ACK (safe).
+ *  - successful turn                      → ACK.
+ *  - TRANSIENTLY-failed turn (turn.failed, or a thrown provider/network error)
+ *    → NACK (Event Center backs it off + eventually dead-letters), then STOP
+ *    draining so we don't ACK past the gap; the rest stay pending for redelivery.
+ *
+ * ACKs earned before the gap are flushed. Returns the next cursor (advanced only
+ * to the point we cleanly handled).
+ */
 export async function runBindingOnce(input: {
   binding: Binding;
   driver: AgentRuntimeDriver;
@@ -116,16 +129,42 @@ export async function runBindingOnce(input: {
   });
 
   const ackIds: string[] = [];
+  let gapped = false;
   for (const update of events) {
+    let parsed: WakePacket | undefined;
     try {
-      const packet = parseWakePacket(update.packet);
-      await processWake({ packet, binding, driver, registry, imClient });
+      parsed = parseWakePacket(update.packet);
     } catch {
-      // Not a valid Mingle wake / non-actionable — safe to drop, still ACK.
+      ackIds.push(update.id); // not a valid Mingle wake — safe to drop
+      continue;
     }
-    ackIds.push(update.id);
+
+    try {
+      const result = await processWake({ packet: parsed, binding, driver, registry, imClient });
+      if (result.events.some((e) => e.type === "turn.failed")) {
+        // Transient turn failure → NACK for backoff, stop draining (P0-3).
+        const reason = failureReason(result.events);
+        await imClient.nack(update.id, reason);
+        gapped = true;
+        break;
+      }
+      ackIds.push(update.id); // handled successfully → ACK
+    } catch (err) {
+      // A thrown error (provider crash / network) is also transient → NACK + stop.
+      await imClient.nack(update.id, err instanceof Error ? err.message : String(err));
+      gapped = true;
+      break;
+    }
   }
+
   if (ackIds.length > 0) await imClient.ack(ackIds);
 
-  return next_cursor ?? input.cursor;
+  // Advance the cursor only when the whole batch drained cleanly; a gap leaves it
+  // so the NACKed + trailing events redeliver.
+  return gapped ? input.cursor : next_cursor ?? input.cursor;
+}
+
+function failureReason(events: RuntimeEvent[]): string {
+  const failed = events.find((e) => e.type === "turn.failed");
+  return failed && "error" in failed ? failed.error : "turn failed";
 }
