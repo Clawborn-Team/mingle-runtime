@@ -4,3 +4,6 @@ dist/
 .DS_Store
 *.tsbuildinfo
 .mingle/
+
+# packed release tarballs
+*.tgz
