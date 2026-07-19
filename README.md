@@ -99,10 +99,27 @@ Shipped in A3 (spec §5.5 + the same hardening bar as A2):
   UNSUPPORTED reply target (e.g. task) NACKs instead of silently ACKing, so the
   reply is never lost.
 
+## Status — Increment A4 (OpenClaw adapter + unified install)
+
+- **`OpenClawDriver`** (`src/openclaw/driver.ts`) — adapts the OpenClaw **Gateway
+  lifecycle** (§5.6), NOT a re-spawned `openclaw` CLI: a Mingle scope_key maps to a
+  Gateway session, one wake runs one Gateway turn, the reply maps to `RuntimeEvent`s.
+  Feeds the SAME `renderWakeInput()` every driver uses (full-context group @ / DM /
+  heartbeat). Depends on a structural `OpenClawGateway` (`src/openclaw/gateway.ts`),
+  with `FakeGateway` for tests; capabilities declared honestly (`streaming:false`).
+- **Driver registry** (`src/runtime/driver-registry.ts`) — `resolveDriver(kind, deps)`
+  for codex / claude-code / openclaw + `driverCapabilities(kind)` for honest UI degrade.
+- **Unified install descriptor** (`src/install/describe.ts`) — the honest, per-runtime
+  install facts (App Server / Agent SDK / Gateway adapter, persistent resumable
+  sessions, real auth). A test asserts NO stale "headless" / "常驻连接器" / "codex exec"
+  / "claude -p" wording and no claude.ai subscription claim. This is the source of
+  truth for the bind-agent copy rewrite (drafted separately, shipped to im-web after
+  team-lead approval).
+
 ## Next
 
-- **A4** — OpenClaw adapter + unified install/UI (+ rewrite the stale bind-agent
-  UI copy that still says "常驻连接器 headless 驱动").
+- **bind-agent.tsx copy** — draft in `docs/bind-agent-copy-draft.md`; ship to im-web
+  after the team-lead approves the wording.
 - **P1-2 (held)** — replace the hand-copied Wake Packet builder with the shared
   schema-versioned adapter + cross-repo fixtures once the team-lead publishes them.
 
