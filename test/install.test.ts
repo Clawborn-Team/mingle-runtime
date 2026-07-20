@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { describeInstall, ALL_RUNTIME_KINDS } from "../src/install/describe.js";
 import { bindingsFromArgs } from "../src/install/config.js";
+import { installOwnerContextSkill } from "../src/install/owner-context-skill.js";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 describe("describeInstall (unified, honest install facts §9.1)", () => {
   it("describes each runtime kind", () => {
@@ -56,5 +60,13 @@ describe("describeInstall (unified, honest install facts §9.1)", () => {
     const b = bindingsFromArgs(["--agent", "a1", "--key", "k", "--im-url", "http://x", "--runtime", "workbuddy"])[0]!;
     expect(b.runtimeKind).toBe("workbuddy");
     expect(b.consumerId).toBe("mingle-runtime-a1-workbuddy");
+  });
+
+  it("installs mingle-owner-context into native Claude, Codex, and OpenClaw skill roots", async () => {
+    const home = await mkdtemp(join(tmpdir(), "mingle-skill-home-"));
+    for (const kind of ["claude-code", "codex", "openclaw"] as const) {
+      const path = await installOwnerContextSkill(kind, { home });
+      expect(await readFile(path, "utf8")).toContain("name: mingle-owner-context");
+    }
   });
 });

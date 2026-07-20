@@ -27,11 +27,23 @@ import { spawnCodexAppServer, type SpawnedAppServer } from "../codex/spawn.js";
 import { CodexAppServerClient } from "../codex/client.js";
 import { spawnWorkBuddyAcp } from "../workbuddy/spawn.js";
 import { WorkBuddyAcpClient } from "../workbuddy/client.js";
+import { discoverClaudeSessions } from "../owner-context/claude-sessions.js";
+import { discoverCodexSessions } from "../owner-context/codex-sessions.js";
+import { prepareOwnerContextRefresh } from "../owner-context/runner.js";
 
 function defaultSessionDbPath(): string {
   const dir = process.env.MINGLE_CONFIG_DIR || join(homedir(), ".mingle");
   mkdirSync(dir, { recursive: true });
   return join(dir, "sessions.db");
+}
+
+function ownerContextStatePath(binding: InstalledBinding): string {
+  const dir = process.env.MINGLE_CONFIG_DIR || join(homedir(), ".mingle");
+  return join(dir, "owner-context", `${binding.agentId}-${binding.runtimeKind}.json`);
+}
+
+function ownerContextConfig(binding: InstalledBinding) {
+  return binding.ownerContext ?? { enabled: true, days: 7, excludeProjects: [], excludeSessions: [] };
 }
 
 /** Assemble the real provider driver for one binding. Honest failure when the
@@ -68,6 +80,22 @@ export async function resolveInstalledDriver(
           permissionMode: "bypassPermissions",
           deniedTools: [],
           persona,
+          ownerContext: async () => {
+            const cfg = ownerContextConfig(ib);
+            if (!cfg.enabled) return "Owner context collection is paused. Return material_change=false.";
+            const result = await prepareOwnerContextRefresh({
+              runtime: "claude-code",
+              days: cfg.days,
+              statePath: ownerContextStatePath(ib),
+              source: () => discoverClaudeSessions({
+                projectsRoot: join(homedir(), ".claude", "projects"),
+                days: cfg.days,
+                excludeProjects: cfg.excludeProjects,
+                excludeSessions: cfg.excludeSessions,
+              }),
+            });
+            return result.prompt;
+          },
           ...(mcpServers ? { mcpServers } : {}),
           ...(ib.model ? { model: ib.model } : {}),
         },
@@ -86,6 +114,22 @@ export async function resolveInstalledDriver(
           // left at codex's default — the app-server's SandboxPolicy is a kebab-tagged
           // enum the client type doesn't model yet; widening it is a follow-up.)
           approvalPolicy: "never",
+          ownerContext: async () => {
+            const cfg = ownerContextConfig(ib);
+            if (!cfg.enabled) return "Owner context collection is paused. Return material_change=false.";
+            const result = await prepareOwnerContextRefresh({
+              runtime: "codex",
+              days: cfg.days,
+              statePath: ownerContextStatePath(ib),
+              source: () => discoverCodexSessions({
+                client,
+                days: cfg.days,
+                excludeProjects: cfg.excludeProjects,
+                excludeSessions: cfg.excludeSessions,
+              }),
+            });
+            return result.prompt;
+          },
           ...(ib.model ? { model: ib.model } : {}),
         },
       });

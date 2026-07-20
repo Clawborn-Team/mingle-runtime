@@ -22,6 +22,12 @@ export type InstalledBinding = {
   model?: string;
   /** Stable Event Center consumer id (single-active-consumer per binding). */
   consumerId: string;
+  ownerContext?: {
+    enabled: boolean;
+    days: number;
+    excludeProjects: string[];
+    excludeSessions: string[];
+  };
 };
 
 export type RuntimeConfig = { bindings: InstalledBinding[] };
@@ -43,7 +49,14 @@ export function expandHome(p: string): string {
 export async function loadConfig(path = defaultConfigPath()): Promise<RuntimeConfig> {
   try {
     const parsed = JSON.parse(await fs.readFile(path, "utf8")) as RuntimeConfig;
-    return { bindings: Array.isArray(parsed.bindings) ? parsed.bindings : [] };
+    return {
+      bindings: Array.isArray(parsed.bindings)
+        ? parsed.bindings.map((binding) => ({
+            ...binding,
+            ownerContext: binding.ownerContext ?? { enabled: true, days: 7, excludeProjects: [], excludeSessions: [] },
+          }))
+        : [],
+    };
   } catch {
     return { bindings: [] };
   }
@@ -99,5 +112,11 @@ export function bindingsFromArgs(args: string[]): InstalledBinding[] {
     ...(flags.dir ? { dir: expandHome(flags.dir) } : {}),
     ...(flags.model ? { model: flags.model } : {}),
     consumerId: `mingle-runtime-${agentId}-${runtime}`,
+    ownerContext: {
+      enabled: flags["owner-context"] !== "false",
+      days: Math.max(1, Number(flags["context-days"] ?? 7) || 7),
+      excludeProjects: (flags["exclude-projects"] ?? "").split(",").filter(Boolean),
+      excludeSessions: (flags["exclude-sessions"] ?? "").split(",").filter(Boolean),
+    },
   }));
 }

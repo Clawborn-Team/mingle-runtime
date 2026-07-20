@@ -17,7 +17,7 @@
  */
 import type { AccountNotification, ReplyTarget, WakeEvent, WakePacket } from "../protocol/wake-packet.js";
 
-export function renderWakeInput(packet: WakePacket, persona?: string): string {
+export function renderWakeInput(packet: WakePacket, persona?: string, ownerContextMaterial?: string): string {
   const lines: string[] = [];
 
   // Persona preamble (spec §5): frame the turn so the model answers AS this Mingle
@@ -31,7 +31,9 @@ export function renderWakeInput(packet: WakePacket, persona?: string): string {
   lines.push(`[Mingle wake · agent ${packet.agent.account_id} (${packet.agent.agent_kind}) · trace ${packet.trace_id}]`);
   lines.push("");
 
-  if (packet.wake.kind === "heartbeat" || !packet.wake.event) {
+  if (isOwnerContextRefresh(packet)) {
+    lines.push(renderOwnerContextRefresh(ownerContextMaterial));
+  } else if (packet.wake.kind === "heartbeat" || !packet.wake.event) {
     lines.push(renderHeartbeat());
   } else {
     lines.push(renderImmediateEvent(packet));
@@ -44,6 +46,22 @@ export function renderWakeInput(packet: WakePacket, persona?: string): string {
   }
 
   return lines.join("\n");
+}
+
+export function isOwnerContextRefresh(packet: WakePacket): boolean {
+  if (!packet.wake.event) return false;
+  const body = bodyOf(packet.wake.event);
+  return !!body && /["']task["']\s*:\s*["']owner_context_refresh["']/.test(body);
+}
+
+function renderOwnerContextRefresh(material?: string): string {
+  return [
+    "## Owner context refresh — execute the mingle-owner-context Skill",
+    "This is an owner-initiated private task. Return only an owner-context-v1 JSON report as your final message; the runtime will deliver it to the Companion.",
+    "Do not expose raw transcripts, credentials, absolute paths, diffs, logs, or code.",
+    "",
+    material ?? "No runtime session material was available. Return material_change=false honestly.",
+  ].join("\n");
 }
 
 function renderImmediateEvent(packet: WakePacket): string {

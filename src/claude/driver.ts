@@ -27,7 +27,7 @@ import type {
 } from "../runtime/driver.js";
 import type { CanUseTool, QueryFn, QueryOptions, SdkMessage } from "./sdk-types.js";
 import { detectClaudeAuth } from "./auth.js";
-import { renderWakeInput } from "../runtime/wake-render.js";
+import { isOwnerContextRefresh, renderWakeInput } from "../runtime/wake-render.js";
 
 export type ClaudeDriverOptions = {
   query: QueryFn;
@@ -43,6 +43,7 @@ export type ClaudeDriverOptions = {
   persona?: string;
   /** SDK permission mode. "bypassPermissions" = YOLO (no prompts, full access). */
   permissionMode?: string;
+  ownerContext?: () => Promise<string>;
 };
 
 const DEFAULT_DENIED = ["Bash"];
@@ -95,7 +96,10 @@ export class ClaudeAgentDriver implements AgentRuntimeDriver {
   }
 
   private async *streamTurn(input: RunTurnInput): AsyncIterable<RuntimeEvent> {
-    const prompt = renderWakeInput(input.packet, this.opts.persona);
+    const material = this.opts.ownerContext && isOwnerContextRefresh(input.packet)
+      ? await this.opts.ownerContext()
+      : undefined;
+    const prompt = renderWakeInput(input.packet, this.opts.persona, material);
     const turnId = `turn-${input.session.ref.providerSessionId}-${Date.now()}`;
     yield { type: "turn.started", turnId };
 

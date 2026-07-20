@@ -23,6 +23,9 @@ import {
 } from "./install/config.js";
 import { describeInstall } from "./install/describe.js";
 import { ensureSingleton as realEnsureSingleton, releaseSingleton as realReleaseSingleton } from "./runtime/singleton.js";
+import { homedir } from "node:os";
+import { dirname } from "node:path";
+import { installOwnerContextSkill } from "./install/owner-context-skill.js";
 
 const USAGE = [
   "mingle-runtime — drive your Mingle agent through a real provider",
@@ -49,6 +52,8 @@ async function persistBindings(rest: string[], configPath: string): Promise<Inst
   let cfg = await loadConfig(configPath);
   for (const b of bindings) cfg = upsertBinding(cfg, b);
   await saveConfig(cfg, configPath);
+  const skillHome = configPath === defaultConfigPath() ? homedir() : dirname(configPath);
+  for (const binding of bindings) await installOwnerContextSkill(binding.runtimeKind, { home: skillHome });
   return bindings;
 }
 

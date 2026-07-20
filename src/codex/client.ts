@@ -39,6 +39,8 @@ export type StartedTurn = {
   completed: Promise<{ status: TurnStatus; error?: string }>;
 };
 
+export type CodexThreadSummary = { id: string; cwd?: string; updatedAt?: string; updated_at?: string };
+
 export class CodexAppServerClient {
   private readonly conn: JsonRpcStdioConnection;
   /** turnId → resolver for its completion promise (set when a caller awaits). */
@@ -97,6 +99,22 @@ export class CodexAppServerClient {
   async threadFork(threadId: string, lastTurnId?: string): Promise<{ threadId: string; forkedFromId?: string }> {
     const res = (await this.conn.request("thread/fork", { threadId, lastTurnId })) as any;
     return { threadId: res.thread.id, forkedFromId: res.thread.forkedFromId };
+  }
+
+  async threadList(params: { limit?: number } = {}): Promise<CodexThreadSummary[]> {
+    const res = (await this.conn.request("thread/list", params)) as any;
+    return (res.data ?? res.threads ?? []).map((thread: any) => ({
+      id: String(thread.id),
+      ...(thread.cwd ? { cwd: String(thread.cwd) } : {}),
+      ...(thread.updatedAt ? { updatedAt: String(thread.updatedAt) } : {}),
+      ...(thread.updated_at ? { updated_at: String(thread.updated_at) } : {}),
+    }));
+  }
+
+  async threadRead(id: string, includeTurns = true): Promise<{ id: string; turns: Array<Record<string, unknown>> }> {
+    const res = (await this.conn.request("thread/read", { threadId: id, includeTurns })) as any;
+    const thread = res.thread ?? res;
+    return { id: String(thread.id ?? id), turns: thread.turns ?? [] };
   }
 
   async turnStart(params: TurnStartParams): Promise<StartedTurn> {

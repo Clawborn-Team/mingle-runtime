@@ -71,4 +71,14 @@ describe("renderWakeInput (P1-5 — one trusted Wake Packet → provider input)"
     const text = renderWakeInput(parseWakePacket(dmWakePacket));
     expect(text).toContain("trace-1");
   });
+
+  it("renders owner_context_refresh as an explicit Skill task, not a generic DM", () => {
+    const packet = structuredClone(dmWakePacket) as any;
+    packet.wake.event.payload.message.body = '{"task":"owner_context_refresh","mode":"recent-briefing","days":7}';
+    const text = renderWakeInput(parseWakePacket(packet), undefined, "SANITIZED SESSION MATERIAL");
+    expect(text).toContain("mingle-owner-context");
+    expect(text).toContain("owner-context-v1");
+    expect(text).toContain("SANITIZED SESSION MATERIAL");
+    expect(text).not.toContain("Write your reply to this event as your FINAL");
+  });
 });

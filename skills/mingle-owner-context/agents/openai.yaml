@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mingle Owner Context"
+  short_description: "Distill recent local sessions into a private owner report"
+  default_prompt: "Generate an owner-context-v1 report from recent local sessions."

@@ -10,7 +10,7 @@
  * `codex exec` is NOT used here — it stays a diagnostics-only fallback (§5.4).
  */
 import { CodexAppServerClient, type ApprovalPolicy, type SandboxPolicy } from "./client.js";
-import { renderWakeInput } from "../runtime/wake-render.js";
+import { isOwnerContextRefresh, renderWakeInput } from "../runtime/wake-render.js";
 import type {
   AgentRuntimeDriver,
   ApprovalDecision,
@@ -31,6 +31,7 @@ export type CodexDriverOptions = {
   model?: string;
   /** Local Agent persona prepended to each turn (so codex answers as this agent). */
   persona?: string;
+  ownerContext?: () => Promise<string>;
 };
 
 /** A queue that turns pushed events into an async-iterable pull stream. */
@@ -134,7 +135,10 @@ export class CodexAppServerDriver implements AgentRuntimeDriver {
   }
 
   private async driveTurn(input: RunTurnInput, queue: EventQueue): Promise<void> {
-    const text = renderWakeInput(input.packet, this.opts.persona);
+    const material = this.opts.ownerContext && isOwnerContextRefresh(input.packet)
+      ? await this.opts.ownerContext()
+      : undefined;
+    const text = renderWakeInput(input.packet, this.opts.persona, material);
     this.currentThreadId = input.session.ref.providerSessionId;
     this.assembledText = "";
     this.finalText = "";
