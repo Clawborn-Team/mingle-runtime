@@ -1,19 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { execFileSync } from "node:child_process";
-import { spawnWorkBuddyAcp } from "../src/workbuddy/spawn.js";
+import { spawnWorkBuddyAcp, codebuddyAvailable } from "../src/workbuddy/spawn.js";
 import { WorkBuddyAcpClient } from "../src/workbuddy/client.js";
 
-/** Real gate only when codebuddy is installed + on PATH; else skip LOUDLY. */
-function codebuddyAvailable(): boolean {
-  try {
-    execFileSync("codebuddy", ["--version"], { stdio: "ignore" });
-    return true;
-  } catch {
-    console.warn("[workbuddy-smoke] SKIPPED: `codebuddy` not on PATH — install + log in to run the real gate.");
-    return false;
-  }
+/** Real gate only when a runnable codebuddy exists (CLI on PATH or embedded in
+ *  WorkBuddy.app); else skip LOUDLY. */
+const available = codebuddyAvailable();
+if (!available) {
+  console.warn("[workbuddy-smoke] SKIPPED: no runnable codebuddy (CLI on PATH or WorkBuddy.app) — install + log in to run the real gate.");
 }
-const maybe = codebuddyAvailable() ? it : it.skip;
+const maybe = available ? it : it.skip;
 
 describe("WorkBuddy ACP smoke (real codebuddy --acp)", () => {
   maybe("initializes + opens a session", async () => {

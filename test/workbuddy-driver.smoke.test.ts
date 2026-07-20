@@ -1,16 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { execFileSync } from "node:child_process";
-import { spawnWorkBuddyAcp } from "../src/workbuddy/spawn.js";
+import { spawnWorkBuddyAcp, codebuddyAvailable } from "../src/workbuddy/spawn.js";
 import { WorkBuddyAcpClient } from "../src/workbuddy/client.js";
 import { WorkBuddyAcpDriver } from "../src/workbuddy/driver.js";
 import { buildWakePacket } from "../src/protocol/wake-adapter.js";
 import type { RuntimeEvent } from "../src/runtime/driver.js";
 
-function codebuddyAvailable(): boolean {
-  try { execFileSync("codebuddy", ["--version"], { stdio: "ignore" }); return true; }
-  catch { console.warn("[workbuddy-driver.smoke] SKIPPED: `codebuddy` not on PATH."); return false; }
+const available = codebuddyAvailable();
+if (!available) {
+  console.warn("[workbuddy-driver.smoke] SKIPPED: no runnable codebuddy (CLI on PATH or WorkBuddy.app).");
 }
-const maybe = codebuddyAvailable() ? it : it.skip;
+const maybe = available ? it : it.skip;
 
 /** A minimal DM wake packet for agent "a1" from peer "u_bob". */
 function dmWake() {

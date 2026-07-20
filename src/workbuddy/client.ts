@@ -30,7 +30,9 @@ export class WorkBuddyAcpClient {
 
   async sessionNew(params: { cwd?: string }): Promise<{ sessionId: string }> {
     const res = (await this.conn.request("session/new", {
-      ...(params.cwd ? { cwd: params.cwd } : {}),
+      // ACP requires `cwd` (an absolute path string) — omitting it is rejected with
+      // -32602 Invalid params. Default to the process cwd when the binding has no dir.
+      cwd: params.cwd ?? process.cwd(),
       mcpServers: [],
     })) as { sessionId: string };
     return { sessionId: res.sessionId };
@@ -39,7 +41,8 @@ export class WorkBuddyAcpClient {
   async sessionLoad(params: { sessionId: string; cwd?: string }): Promise<void> {
     await this.conn.request("session/load", {
       sessionId: params.sessionId,
-      ...(params.cwd ? { cwd: params.cwd } : {}),
+      // `cwd` is required here too (same ACP contract as session/new).
+      cwd: params.cwd ?? process.cwd(),
       mcpServers: [],
     });
   }
