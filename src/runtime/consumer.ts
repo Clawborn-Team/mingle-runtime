@@ -13,6 +13,7 @@
 import type { WakePacket } from "../protocol/wake-packet.js";
 import { buildWakePacket, deriveConversation } from "../protocol/wake-adapter.js";
 import { deriveScopeKey } from "../protocol/scope.js";
+import type { RuntimeUpdateDirective } from "./self-update.js";
 import type { AgentRuntimeDriver, ProviderSession, RuntimeEvent } from "./driver.js";
 import type { RuntimeKind, SessionRegistry } from "./session-registry.js";
 
@@ -29,7 +30,13 @@ export type Binding = {
  *  the wake-adapter — im-server does NOT pre-build the packet (matches how
  *  mingle-hosted-agent consumes the same stream). */
 export type RawAccountEvent = { id: string; type: string; payload?: Record<string, unknown> };
-export type UpdatesResult = { events: RawAccountEvent[]; notifications?: RawAccountEvent[]; next_cursor?: string };
+export type UpdatesResult = {
+  events: RawAccountEvent[];
+  notifications?: RawAccountEvent[];
+  next_cursor?: string;
+  /** Platform-controlled directives (e.g. runtime.update) — surfaced to the daemon. */
+  runtime_directives?: RuntimeUpdateDirective[];
+};
 
 /** The minimal Event Center surface the loop needs (learned from the reference
  *  connector's ImClient, re-implemented here — nothing imported from openclaw-mingle). */
@@ -171,12 +178,15 @@ export async function runBindingOnce(input: {
   imClient: EventCenterClient;
   cursor?: string;
   wait?: number;
+  /** Platform directives (runtime.update, …) surfaced to the daemon for self-update. */
+  onDirectives?: (directives: RuntimeUpdateDirective[]) => void;
 }): Promise<string | undefined> {
   const { binding, driver, registry, imClient } = input;
-  const { events, next_cursor } = await imClient.getUpdates({
+  const { events, next_cursor, runtime_directives } = await imClient.getUpdates({
     ...(input.cursor ? { cursor: input.cursor } : {}),
     ...(input.wait !== undefined ? { wait: input.wait } : {}),
   });
+  if (runtime_directives && runtime_directives.length > 0) input.onDirectives?.(runtime_directives);
 
   const ackIds: string[] = [];
   let gapped = false;

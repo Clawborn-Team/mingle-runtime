@@ -84,6 +84,16 @@ describe("runBindingOnce", () => {
     expect(cursor).toBe("c2");
   });
 
+  it("surfaces runtime_directives (auto-update) to onDirectives", async () => {
+    const registry = new InMemorySessionRegistry();
+    const driver = new FakeDriver();
+    const directive = { id: "d1", type: "runtime.update", runtime: "mingle-runtime", version: "9.9.9", install_url: "https://x.tgz" };
+    const im = fakeImClient([{ events: [], runtime_directives: [directive] }]);
+    const seen: unknown[] = [];
+    await runBindingOnce({ binding, driver, registry, imClient: im, onDirectives: (d) => seen.push(...d) });
+    expect(seen).toEqual([directive]);
+  });
+
   it("ACKs a non-actionable event without a turn", async () => {
     const registry = new InMemorySessionRegistry();
     const driver = new FakeDriver();

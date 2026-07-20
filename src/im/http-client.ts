@@ -9,6 +9,7 @@
  * mingle-hosted-agent's channel-post discipline; re-implemented, nothing imported.
  */
 import type { EventCenterClient, UpdatesResult } from "../runtime/consumer.js";
+import { RUNTIME_NAME, RUNTIME_VERSION, RUNTIME_CAPABILITIES } from "../version.js";
 
 export type HttpClientConfig = {
   imUrl: string;
@@ -21,7 +22,15 @@ export function createHttpEventCenterClient(cfg: HttpClientConfig): EventCenterC
   const doFetch = cfg.fetchImpl ?? fetch;
   const base = cfg.imUrl.replace(/\/+$/, "");
   const auth = { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json" };
-  const consumerHeaders = { ...auth, "X-Mingle-Consumer-ID": cfg.consumerId };
+  // Runtime identity for the auto-update handshake: im-server compares the version
+  // to its rollout target and returns a runtime.update directive when we're behind.
+  const consumerHeaders = {
+    ...auth,
+    "X-Mingle-Consumer-ID": cfg.consumerId,
+    "X-Mingle-Runtime": RUNTIME_NAME,
+    "X-Mingle-Runtime-Version": RUNTIME_VERSION,
+    "X-Mingle-Runtime-Capabilities": RUNTIME_CAPABILITIES.join(","),
+  };
 
   async function postChannel(slug: string, body: string): Promise<{ ok: boolean; status: number }> {
     const url = `${base}/v1/channels/${encodeURIComponent(slug)}/messages`;
@@ -39,11 +48,13 @@ export function createHttpEventCenterClient(cfg: HttpClientConfig): EventCenterC
         events?: unknown[];
         notifications?: unknown[];
         next_cursor?: string;
+        runtime_directives?: unknown[];
       };
       return {
         events: (json.events ?? []) as UpdatesResult["events"],
         notifications: (json.notifications ?? []) as UpdatesResult["notifications"],
         next_cursor: json.next_cursor,
+        runtime_directives: (json.runtime_directives ?? []) as UpdatesResult["runtime_directives"],
       };
     },
 

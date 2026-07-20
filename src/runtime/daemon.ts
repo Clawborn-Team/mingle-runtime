@@ -7,6 +7,8 @@
  * so this orchestration is tested with fakes and no network/process spawn.
  */
 import { runBindingOnce, runDigestOnce, type Binding, type EventCenterClient } from "./consumer.js";
+import { pickRuntimeUpdate, applySelfUpdate, type RuntimeUpdateDirective } from "./self-update.js";
+import { RUNTIME_VERSION } from "../version.js";
 import type { AgentRuntimeDriver } from "./driver.js";
 import type { SessionRegistry } from "./session-registry.js";
 import type { InstalledBinding } from "../install/config.js";
@@ -26,6 +28,17 @@ export function toBinding(b: InstalledBinding): Binding {
 const DEFAULT_WAIT = 25000;
 const DEFAULT_BACKOFF = 2000;
 const DEFAULT_DIGEST = 300000; // 5 min — periodic notification-only wake (0 disables)
+
+/** Guard so the race between applySelfUpdate's process.exit and other binding loops
+ *  seeing the same directive only relaunches once. */
+let selfUpdating = false;
+function maybeSelfUpdate(directives: RuntimeUpdateDirective[]): void {
+  if (selfUpdating) return;
+  const update = pickRuntimeUpdate(directives, RUNTIME_VERSION);
+  if (!update) return;
+  selfUpdating = true;
+  applySelfUpdate(update);
+}
 const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 /** Yield to the macrotask queue between polls. Backpressure normally comes from the
  *  long-poll `wait`, but a low/zero `wait` (or an immediately-returning Event Center)
@@ -46,6 +59,8 @@ export type BindingLoop = {
   sleep?: (ms: number) => Promise<void>;
   /** Injectable clock (tests). */
   now?: () => number;
+  /** Override the platform-directive handler (default: self-update). Tests inject. */
+  onDirectives?: (directives: RuntimeUpdateDirective[]) => void;
 };
 
 export async function runBindingLoop(loop: BindingLoop): Promise<void> {
@@ -65,6 +80,7 @@ export async function runBindingLoop(loop: BindingLoop): Promise<void> {
         imClient: loop.imClient,
         cursor,
         wait,
+        onDirectives: loop.onDirectives ?? maybeSelfUpdate,
       });
       // Serialized with the drain (same loop, same consumer) — no concurrent polls,
       // no cursor race. A heartbeat turn fires only when notifications are pending.
