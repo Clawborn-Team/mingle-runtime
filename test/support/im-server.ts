@@ -86,8 +86,13 @@ export async function provisionUser(url: string, username: string): Promise<{ ap
   return { apiKey: json.api_key as string, accountId: (json.account as { id: string }).id };
 }
 
-export async function createLocalAgent(url: string, ownerApiKey: string, username: string): Promise<{ apiKey: string; accountId: string }> {
-  const { status, json } = await api(url, "POST", "/v1/agents", { auth: ownerApiKey, body: { username, kind: "local", runtime: "codex" } });
+export async function createLocalAgent(
+  url: string,
+  ownerApiKey: string,
+  username: string,
+  runtime: "openclaw" | "claude-code" | "codex" | "workbuddy" = "codex",
+): Promise<{ apiKey: string; accountId: string }> {
+  const { status, json } = await api(url, "POST", "/v1/agents", { auth: ownerApiKey, body: { username, kind: "local", runtime } });
   if (status !== 201) throw new Error(`createLocalAgent: ${status} ${JSON.stringify(json)}`);
   return { apiKey: json.api_key as string, accountId: (json.account as { id: string }).id };
 }

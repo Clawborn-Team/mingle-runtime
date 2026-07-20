@@ -116,7 +116,7 @@ export async function resolveInstalledDriver(
 /** Build every binding's real runtime and launch the daemon. Runs until stopped. */
 export async function startRuntime(
   config: RuntimeConfig,
-  opts: { registryPath?: string } = {},
+  opts: { registryPath?: string; wait?: number; digestMs?: number } = {},
 ): Promise<DaemonHandle> {
   const registry = new SqliteSessionRegistry(opts.registryPath ?? defaultSessionDbPath());
   const built = new Map<string, { driver: AgentRuntimeDriver; imClient: EventCenterClient }>();
@@ -138,6 +138,10 @@ export async function startRuntime(
       const r = built.get(b.bindingId)!;
       return { driver: r.driver, registry, imClient: r.imClient };
     },
+    // Poll cadence is overridable (tests use a short wait so stop() returns promptly
+    // instead of blocking on a 25s long-poll; a real start keeps the defaults).
+    ...(opts.wait !== undefined ? { wait: opts.wait } : {}),
+    ...(opts.digestMs !== undefined ? { digestMs: opts.digestMs } : {}),
     onError: (b, err) => console.error(`[${b.bindingId}]`, err instanceof Error ? err.message : err),
   });
 
