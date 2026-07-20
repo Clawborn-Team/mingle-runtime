@@ -1,0 +1,32 @@
+{
+  "schema_version": "owner-context-v1",
+  "mode": "recent-briefing",
+  "window": {
+    "days": 7,
+    "from": "2026-07-14T00:00:00.000Z",
+    "to": "2026-07-21T00:00:00.000Z"
+  },
+  "source_summary": {
+    "runtime": "codex",
+    "session_count": 3,
+    "project_count": 2
+  },
+  "recent_activity": [
+    {
+      "topic": "Mingle Owner Memory",
+      "summary": "正在完善 Owner Memory Vault 与 Local Agent session 蒸馏",
+      "status": "in_progress",
+      "last_seen_at": "2026-07-21T00:00:00.000Z",
+      "confidence": "high"
+    }
+  ],
+  "decisions": [
+    "Local Agent 只观察和报告，小龙负责分类与沉淀"
+  ],
+  "open_threads": [],
+  "current_concerns": [
+    "保持原始本机 session 不出站"
+  ],
+  "questions_companion_may_ask": [],
+  "material_change": true
+}
