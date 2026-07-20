@@ -85,7 +85,18 @@ function commandRuns(command: string, baseArgs: string[], extraEnv: NodeJS.Proce
 }
 
 export function spawnWorkBuddyAcp(
-  opts: { command?: string; args?: string[]; env?: NodeJS.ProcessEnv } = {},
+  opts: {
+    command?: string;
+    args?: string[];
+    /** Extra args appended after `--acp` on the default-launcher path (e.g.
+     *  `--permission-mode bypassPermissions`). Ignored when `args` is given. */
+    acpArgs?: string[];
+    env?: NodeJS.ProcessEnv;
+    /** OS process cwd for the codebuddy child. IMPORTANT: codebuddy's tools operate
+     *  in the PROCESS cwd, not the `session/new` cwd param — so this is what bounds
+     *  where the agent reads/writes. Defaults to the daemon's cwd when omitted. */
+    cwd?: string;
+  } = {},
 ): SpawnedAcpServer {
   let command = opts.command;
   let baseArgs: string[] = [];
@@ -102,11 +113,12 @@ export function spawnWorkBuddyAcp(
     baseArgs = launcher.args;
     baseEnv = launcher.env;
   }
-  const args = opts.args ?? [...baseArgs, "--acp"];
+  const args = opts.args ?? [...baseArgs, "--acp", ...(opts.acpArgs ?? [])];
   const env = opts.env ?? { ...process.env, ...baseEnv };
   const child = spawn(command, args, {
     stdio: ["pipe", "pipe", "pipe"],
     env,
+    ...(opts.cwd ? { cwd: opts.cwd } : {}),
   }) as ChildProcessWithoutNullStreams;
 
   const connection = new JsonRpcStdioConnection({ write: (line) => child.stdin.write(line) });

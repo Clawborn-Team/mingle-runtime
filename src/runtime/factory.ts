@@ -97,16 +97,16 @@ export async function resolveInstalledDriver(
           "Use the OpenClaw install command from the Bind Agent flow.",
       );
     case "workbuddy": {
-      const server = spawnWorkBuddyAcp();
+      const cwd = ib.dir ? expandHome(ib.dir) : process.cwd();
+      // YOLO (open the aperture): bypass permission prompts so the Local Agent acts on
+      // the owner's behalf without blocking (parity with codex approvalPolicy:"never" /
+      // claude bypassPermissions). Spawn cwd = the binding dir because codebuddy's tools
+      // operate in the PROCESS cwd, not the session/new cwd (verified live).
+      const server = spawnWorkBuddyAcp({ cwd, acpArgs: ["--permission-mode", "bypassPermissions"] });
       const client = new WorkBuddyAcpClient(server.connection);
       const { loadSession } = await client.initialize({ name: "mingle-runtime", version: "0" });
       const driver = resolveDriver("workbuddy", {
-        workbuddy: {
-          client,
-          loadSession,
-          cwd: ib.dir ? expandHome(ib.dir) : process.cwd(),
-          persona,
-        },
+        workbuddy: { client, loadSession, cwd, persona },
       });
       return { driver, dispose: () => server.stop() };
     }
