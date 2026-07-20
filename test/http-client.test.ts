@@ -76,6 +76,14 @@ describe("HttpEventCenterClient", () => {
     expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({ to: "acc_peer", body: "hi" });
   });
 
+  it("reports owner-context preparation status without exposing session material", async () => {
+    const { impl, calls } = fakeFetch({ "/v1/me/runtime-status": { status: 200 } });
+    const client = createHttpEventCenterClient({ ...base, fetchImpl: impl });
+    await client.reportOwnerContext?.({ status: "prepared", updated_at: 123, mode: "recent-briefing", material_change: true });
+    expect(calls[0]!.url).toContain("/v1/me/runtime-status");
+    expect(JSON.parse(String(calls[0]!.init!.body))).toEqual({ owner_context: { status: "prepared", updated_at: 123, mode: "recent-briefing", material_change: true } });
+  });
+
   it("postToChannel posts to /v1/channels/<slug>/messages", async () => {
     const { impl, calls } = fakeFetch({ "/messages": { status: 201 } });
     const client = createHttpEventCenterClient({ ...base, fetchImpl: impl });

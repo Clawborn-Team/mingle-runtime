@@ -49,9 +49,30 @@ export function renderWakeInput(packet: WakePacket, persona?: string, ownerConte
 }
 
 export function isOwnerContextRefresh(packet: WakePacket): boolean {
-  if (!packet.wake.event) return false;
+  return ownerContextTask(packet) !== null;
+}
+
+export type OwnerContextTask = {
+  mode: "recent-briefing" | "owner-portrait";
+  days: number;
+  excludedProjects: string[];
+  includeWorkspace: boolean;
+};
+
+export function ownerContextTask(packet: WakePacket): OwnerContextTask | null {
+  if (!packet.wake.event) return null;
   const body = bodyOf(packet.wake.event);
-  return !!body && /["']task["']\s*:\s*["']owner_context_refresh["']/.test(body);
+  if (!body) return null;
+  try {
+    const parsed = JSON.parse(body) as Record<string, unknown>;
+    if (parsed.task !== "owner_context_refresh") return null;
+    const mode = parsed.mode === "owner-portrait" ? "owner-portrait" : "recent-briefing";
+    const days = Number.isInteger(parsed.days) ? Math.max(1, Math.min(90, Number(parsed.days))) : 7;
+    const excludedProjects = Array.isArray(parsed.excluded_projects) ? parsed.excluded_projects.map(String) : [];
+    return { mode, days, excludedProjects, includeWorkspace: parsed.include_workspace !== false };
+  } catch {
+    return null;
+  }
 }
 
 function renderOwnerContextRefresh(material?: string): string {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderWakeInput } from "../src/runtime/wake-render.js";
+import { ownerContextTask, renderWakeInput } from "../src/runtime/wake-render.js";
 import { parseWakePacket } from "../src/protocol/wake-packet.js";
 import {
   dmWakePacket,
@@ -80,5 +80,6 @@ describe("renderWakeInput (P1-5 — one trusted Wake Packet → provider input)"
     expect(text).toContain("owner-context-v1");
     expect(text).toContain("SANITIZED SESSION MATERIAL");
     expect(text).not.toContain("Write your reply to this event as your FINAL");
+    expect(ownerContextTask(parseWakePacket(packet))).toMatchObject({ mode: "recent-briefing", days: 7 });
   });
 });

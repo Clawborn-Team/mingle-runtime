@@ -24,4 +24,14 @@ describe("owner context refresh runner", () => {
     expect(result.prompt).toContain("session_count");
     expect(result.prompt).toContain("0");
   });
+
+  it("builds an owner portrait task instead of a recent briefing when requested", async () => {
+    const statePath = join(await mkdtemp(join(tmpdir(), "mingle-context-portrait-")), "state.json");
+    const result = await prepareOwnerContextRefresh({
+      runtime: "codex", mode: "owner-portrait", days: 14, statePath,
+      source: async () => [{ provider: "codex", sessionId: "s", project: "alpha", updatedAt: "2026-07-20T00:00:00Z", messages: [{ role: "user", text: "先确认产品边界" }] }],
+    });
+    expect(result.prompt).toContain("owner-portrait");
+    expect(result.prompt).toContain("portrait_signals");
+  });
 });

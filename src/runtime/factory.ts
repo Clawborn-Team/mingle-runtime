@@ -80,21 +80,28 @@ export async function resolveInstalledDriver(
           permissionMode: "bypassPermissions",
           deniedTools: [],
           persona,
-          ownerContext: async () => {
+          ownerContext: async (task) => {
             const cfg = ownerContextConfig(ib);
             if (!cfg.enabled) return "Owner context collection is paused. Return material_change=false.";
-            const result = await prepareOwnerContextRefresh({
+            try {
+              const result = await prepareOwnerContextRefresh({
               runtime: "claude-code",
-              days: cfg.days,
+              mode: task.mode,
+              days: task.days,
               statePath: ownerContextStatePath(ib),
               source: () => discoverClaudeSessions({
                 projectsRoot: join(homedir(), ".claude", "projects"),
-                days: cfg.days,
-                excludeProjects: cfg.excludeProjects,
+                days: task.days,
+                excludeProjects: [...new Set([...cfg.excludeProjects, ...task.excludedProjects])],
                 excludeSessions: cfg.excludeSessions,
               }),
-            });
-            return result.prompt;
+              });
+              await imClient.reportOwnerContext?.({ status: "prepared", updated_at: Date.now(), mode: task.mode, material_change: result.materialChange });
+              return result.prompt;
+            } catch (error) {
+              await imClient.reportOwnerContext?.({ status: "failure", updated_at: Date.now(), mode: task.mode, error: error instanceof Error ? error.message : String(error) });
+              throw error;
+            }
           },
           ...(mcpServers ? { mcpServers } : {}),
           ...(ib.model ? { model: ib.model } : {}),
@@ -114,21 +121,28 @@ export async function resolveInstalledDriver(
           // left at codex's default — the app-server's SandboxPolicy is a kebab-tagged
           // enum the client type doesn't model yet; widening it is a follow-up.)
           approvalPolicy: "never",
-          ownerContext: async () => {
+          ownerContext: async (task) => {
             const cfg = ownerContextConfig(ib);
             if (!cfg.enabled) return "Owner context collection is paused. Return material_change=false.";
-            const result = await prepareOwnerContextRefresh({
+            try {
+              const result = await prepareOwnerContextRefresh({
               runtime: "codex",
-              days: cfg.days,
+              mode: task.mode,
+              days: task.days,
               statePath: ownerContextStatePath(ib),
               source: () => discoverCodexSessions({
                 client,
-                days: cfg.days,
-                excludeProjects: cfg.excludeProjects,
+                days: task.days,
+                excludeProjects: [...new Set([...cfg.excludeProjects, ...task.excludedProjects])],
                 excludeSessions: cfg.excludeSessions,
               }),
-            });
-            return result.prompt;
+              });
+              await imClient.reportOwnerContext?.({ status: "prepared", updated_at: Date.now(), mode: task.mode, material_change: result.materialChange });
+              return result.prompt;
+            } catch (error) {
+              await imClient.reportOwnerContext?.({ status: "failure", updated_at: Date.now(), mode: task.mode, error: error instanceof Error ? error.message : String(error) });
+              throw error;
+            }
           },
           ...(ib.model ? { model: ib.model } : {}),
         },

@@ -80,6 +80,9 @@ describe("runCli", () => {
     expect(out).toContain("mingle_agent_id: agt"); // Mingle id embedded in the local metadata
     expect(out).toContain("mingle-runtime start"); // launch daemon
     expect(out).toContain("/v1/me"); // mirror to Mingle
+    expect(out).toContain("/v1/agents/agt/local-config");
+    expect(out).toContain("working_style");
+    expect(out).not.toContain('"interests"');
     expect(out).not.toContain('"k"'); // the api-key is read from config, never printed
   });
 

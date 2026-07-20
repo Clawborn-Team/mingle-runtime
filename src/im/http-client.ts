@@ -88,6 +88,16 @@ export function createHttpEventCenterClient(cfg: HttpClientConfig): EventCenterC
       return { ok: res.status === 201, status: res.status };
     },
 
+    async reportOwnerContext(status) {
+      try {
+        await doFetch(`${base}/v1/me/runtime-status`, {
+          method: "PATCH", headers: auth, body: JSON.stringify({ owner_context: status }),
+        });
+      } catch {
+        /* status is informational; never fail the real turn */
+      }
+    },
+
     async postActivity(peerId, state, detail) {
       // Best-effort ephemeral presence; never let it break a turn.
       try {

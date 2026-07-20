@@ -52,6 +52,9 @@ export interface EventCenterClient {
   /** Report ephemeral turn activity to a DM peer (truthful thinking indicator). Optional
    *  (best-effort presence) so test fakes needn't implement it; `done`/`failed` clear it. */
   postActivity?(peerId: string, state: "thinking" | "tool" | "done" | "failed", detail?: string): Promise<void>;
+  /** Best-effort product status for the owner's Local Agent page. Contains no
+   * session text, only refresh state metadata. */
+  reportOwnerContext?(status: { status: "prepared" | "success" | "failure"; updated_at: number; mode: "recent-briefing" | "owner-portrait"; material_change?: boolean; error?: string }): Promise<void>;
 }
 
 /** Whether a turn's reply reached its target. `unsupported` means the reply
