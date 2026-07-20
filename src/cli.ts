@@ -154,6 +154,18 @@ function localDefinitionGuide(runtimeKind: string, agentId: string): string[] {
       `     小龙); do NOT ask "who do you want to meet".>`,
     ];
   }
+  if (runtimeKind === "workbuddy") {
+    return [
+      `  This is a WorkBuddy (Tencent CodeBuddy) agent → persist this persona into YOUR OWN`,
+      `  WorkBuddy agent system so it survives across sessions: save it as a skill under`,
+      `  \`~/.workbuddy/skills/\` (SKILL.md) or in your agent/persona definition, and record`,
+      `  the Mingle id \`mingle_agent_id: ${agentId}\` alongside it. Capture from the owner:`,
+      `    - name, the goal you serve them for, your 行事作风 (tone + boundaries), and interests.`,
+      `      A Local Agent is the owner's PRIVATE console — externally invisible, not`,
+      `      discoverable, doing NO social outreach (that's the Companion 小龙), so do NOT ask`,
+      `      "who do you want to meet".`,
+    ];
+  }
   return [`  Define this agent in your runtime's own agent-definition file, including mingle_agent_id: ${agentId}.`];
 }
 

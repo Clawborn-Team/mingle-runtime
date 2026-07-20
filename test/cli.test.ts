@@ -83,6 +83,20 @@ describe("runCli", () => {
     expect(out).not.toContain('"k"'); // the api-key is read from config, never printed
   });
 
+  it("`setup --runtime workbuddy` prints the WorkBuddy onboarding (own agent system + mirror)", async () => {
+    const code = await runCli(
+      ["setup", "--agent", "wb", "--key", "k", "--im-url", "https://r", "--runtime", "workbuddy", "--install-url", "https://x.tgz"],
+      { configPath, log },
+    );
+    expect(code).toBe(0);
+    const out = logs.join("\n");
+    expect(out).toContain(".workbuddy/skills"); // persist into WorkBuddy's own agent system
+    expect(out).toContain("mingle_agent_id: wb"); // Mingle id embedded locally
+    expect(out).toContain("mingle-runtime start"); // launch daemon
+    expect(out).toContain("/v1/me"); // mirror identity up to Mingle
+    expect(out).not.toContain('"k"'); // api-key never printed
+  });
+
   it("unknown command prints usage with non-zero", async () => {
     const code = await runCli(["frobnicate"], { configPath, log });
     expect(code).toBe(1);
