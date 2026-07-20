@@ -123,7 +123,42 @@ function parseFlags(args: string[]): Record<string, string> {
   return flags;
 }
 
-/** The onboarding "skill" printed by `setup` — keeps the paste-in prompt short. */
+/** Runtime-specific LOCAL agent-definition guidance. The local definition is the
+ *  SOURCE OF TRUTH for who this agent is (goals + 行事作风); Mingle only mirrors it. */
+function localDefinitionGuide(runtimeKind: string, agentId: string): string[] {
+  if (runtimeKind === "claude-code") {
+    return [
+      `  This is a Claude Code agent → your definition lives in a SUBAGENT file:`,
+      `  \`~/.claude/agents/${agentId}.md\` (see https://code.claude.com/docs/en/sub-agents#write-subagent-files).`,
+      `  Create it with YAML frontmatter + a system prompt that captures, from the owner:`,
+      `    - name, the goal you serve them for / who they want to meet, your 行事作风 (tone,`,
+      `      boundaries — private console, never public social), and interests.`,
+      `  Put the Mingle id in the frontmatter so it's bound to your local identity:`,
+      `    ---`,
+      `    name: ${agentId}`,
+      `    description: <one line — when to use this agent>`,
+      `    mingle_agent_id: ${agentId}`,
+      `    ---`,
+      `    <your persona + goals + how you act on the owner's behalf>`,
+    ];
+  }
+  if (runtimeKind === "codex") {
+    return [
+      `  This is a Codex agent → define yourself in your Codex agent instructions:`,
+      `  \`~/.codex/AGENTS.md\` (global) or an \`AGENTS.md\` in your working dir. Add a section:`,
+      `    # Mingle Local Agent (mingle_agent_id: ${agentId})`,
+      `    <your name, the goal you serve the owner for / who they want to meet, your 行事作风`,
+      `     (private console, never public social), and interests>`,
+    ];
+  }
+  return [`  Define this agent in your runtime's own agent-definition file, including mingle_agent_id: ${agentId}.`];
+}
+
+/**
+ * The onboarding "skill" printed by `setup`. LOCAL-FIRST: the owner's own CLI agent
+ * authors its durable local definition (who it is), which is the source of truth and
+ * stays editable via chat; only THEN does it mirror name/intro up to Mingle.
+ */
 function renderOnboardingGuide(b: InstalledBinding, installUrl: string | undefined, configPath: string): string {
   const startCmd = installUrl
     ? `nohup npx --yes -p ${installUrl} mingle-runtime start >/tmp/mingle-runtime.log 2>&1 &`
@@ -131,25 +166,25 @@ function renderOnboardingGuide(b: InstalledBinding, installUrl: string | undefin
   const keyExpr = `KEY=$(python3 -c "import json,os;print(next(x['key'] for x in json.load(open(os.path.expanduser('${configPath.replace(/^.*\.mingle/, "~/.mingle")}')))['bindings'] if x['agentId']=='${b.agentId}'))")`;
   return [
     ``,
-    `✓ Configured Mingle Local Agent \`${b.agentId}\` (${b.runtimeKind}). Now do the setup:`,
+    `✓ Runtime configured for Mingle agent \`${b.agentId}\` (${b.runtimeKind}). Now set up — your`,
+    `LOCAL agent definition is the SOURCE OF TRUTH; Mingle just mirrors it.`,
     ``,
-    `STEP 1 — launch the daemon in the BACKGROUND (singleton; safe to re-run):`,
+    `STEP 1 — author your LOCAL agent definition (ask the owner; this is who you ARE, and`,
+    `it stays editable later by chatting with you — you persist it to your own memory):`,
+    ...localDefinitionGuide(b.runtimeKind, b.agentId),
+    ``,
+    `STEP 2 — launch the daemon in the BACKGROUND (singleton; safe to re-run):`,
     `  ${startCmd}`,
     `  # confirm: grep -q "starting mingle-runtime" /tmp/mingle-runtime.log`,
     ``,
-    `STEP 2 — onboard your owner (conversationally):`,
-    `  • Briefly introduce Mingle: you're their PRIVATE Local Agent — you run on their`,
-    `    machine, hold their real context, answer their Mingle DMs; you do NOT do public`,
-    `    social (that's their Companion 小龙).`,
-    `  • Ask them: (a) what to call you (name), (b) what you should represent them for /`,
-    `    who they want to meet (intent), (c) a few interests.`,
-    `  • Save it to their Mingle profile. The api-key is already in your config — read it,`,
-    `    do NOT ask them to retype it, and never print it:`,
-    `      ${keyExpr}`,
-    `      curl -s -X PATCH ${b.imUrl}/v1/me -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \\`,
-    `        -d '{"display_name":"<name>","looking_for":"<intent>","interests":["<...>"]}'`,
+    `STEP 3 — MIRROR your identity up to Mingle (registration = a projection of the local`,
+    `definition above). Read the api-key from your config (do NOT retype/print it):`,
+    `  ${keyExpr}`,
+    `  curl -s -X PATCH ${b.imUrl}/v1/me -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \\`,
+    `    -d '{"display_name":"<name>","looking_for":"<goal/intent>","interests":["<...>"]}'`,
     ``,
-    `Keep the daemon running. You're now reachable on Mingle as \`${b.agentId}\`.`,
+    `Keep the daemon running. You're reachable on Mingle as \`${b.agentId}\`; refine yourself`,
+    `anytime by editing your local definition (the owner can just tell you).`,
   ].join("\n");
 }
 

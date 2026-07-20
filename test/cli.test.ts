@@ -75,10 +75,11 @@ describe("runCli", () => {
     );
     expect(code).toBe(0);
     const out = logs.join("\n");
-    expect(out).toMatch(/onboard/i);
-    expect(out).toContain("mingle-runtime start"); // step 1: launch daemon
-    expect(out).toContain("/v1/me"); // step 2: save profile
-    expect(out).toContain("agt");
+    expect(out).toMatch(/source of truth/i); // local definition is authoritative
+    expect(out).toContain(".claude/agents/agt.md"); // claude-code → local subagent definition
+    expect(out).toContain("mingle_agent_id: agt"); // Mingle id embedded in the local metadata
+    expect(out).toContain("mingle-runtime start"); // launch daemon
+    expect(out).toContain("/v1/me"); // mirror to Mingle
     expect(out).not.toContain('"k"'); // the api-key is read from config, never printed
   });
 
