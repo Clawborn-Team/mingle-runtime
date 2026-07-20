@@ -94,6 +94,11 @@ export async function resolveInstalledDriver(
         "openclaw runs via the openclaw-mingle plugin, not `mingle-runtime start`. " +
           "Use the OpenClaw install command from the Bind Agent flow.",
       );
+    case "workbuddy":
+      throw new Error(
+        "workbuddy is not launched via `mingle-runtime start` — construct WorkBuddyAcpDriver " +
+          "directly with a spawnWorkBuddyAcp() connection.",
+      );
   }
 }
 

@@ -10,7 +10,7 @@
  */
 import type { RuntimeKind } from "../runtime/driver.js";
 
-export const ALL_RUNTIME_KINDS: RuntimeKind[] = ["codex", "claude-code", "openclaw"];
+export const ALL_RUNTIME_KINDS: RuntimeKind[] = ["codex", "claude-code", "openclaw", "workbuddy"];
 
 export type InstallDescriptor = {
   kind: RuntimeKind;
@@ -61,6 +61,17 @@ const DESCRIPTORS: Record<RuntimeKind, InstallDescriptor> = {
       "同一 Agent 凭证同一时刻只有一个活跃 consumer。",
     ],
     auth: [],
+  },
+  workbuddy: {
+    kind: "workbuddy",
+    label: "WorkBuddy (CodeBuddy ACP)",
+    summary: "通过 CodeBuddy ACP server 驱动，每个 scope 对应一个 ACP session，自动批准权限。",
+    details: [
+      "以 stdio 启动 codebuddy --acp，JSON-RPC 驱动 session/new|load|prompt。",
+      "权限请求自动批准（YOLO 模式）；codebuddy 在其自身沙箱中执行。",
+      "每个 scope 对应一个持久 ACP session；loadSession 能力决定能否跨进程 resume。",
+    ],
+    auth: ["CodeBuddy 登录（由 codebuddy 自行持有，Mingle 不接触其凭证）"],
   },
 };
 

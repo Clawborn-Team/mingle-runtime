@@ -27,6 +27,8 @@ export function resolveDriver(kind: RuntimeKind, deps: DriverDeps): AgentRuntime
     case "openclaw":
       if (!deps.openclaw) throw new Error("resolveDriver: openclaw deps (gateway) required for the openclaw driver");
       return new OpenClawDriver(deps.openclaw);
+    case "workbuddy":
+      throw new Error("resolveDriver: workbuddy is not wired through the registry — construct WorkBuddyAcpDriver directly via factory");
   }
 }
 
@@ -36,6 +38,7 @@ const CAPABILITIES: Record<RuntimeKind, RuntimeCapabilities> = {
   codex: { streaming: true, tools: true, approvals: true, fileChanges: true, resume: true },
   "claude-code": { streaming: true, tools: true, approvals: true, fileChanges: true, resume: true },
   openclaw: { streaming: false, tools: true, approvals: false, fileChanges: false, resume: true },
+  workbuddy: { streaming: true, tools: true, approvals: true, fileChanges: false, resume: true },
 };
 
 export function driverCapabilities(kind: RuntimeKind): RuntimeCapabilities {

@@ -10,7 +10,7 @@
  */
 import type { WakePacket } from "../protocol/wake-packet.js";
 
-export type RuntimeKind = "openclaw" | "claude-code" | "codex";
+export type RuntimeKind = "openclaw" | "claude-code" | "codex" | "workbuddy";
 
 /** The unified turn event stream (spec §5.2). Not every provider emits every
  *  variant — capabilities say which are real; the runtime never fabricates the rest. */
