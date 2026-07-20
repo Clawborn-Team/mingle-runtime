@@ -53,7 +53,7 @@ describe("describeInstall (unified, honest install facts §9.1)", () => {
   });
 
   it("parses --runtime workbuddy into a binding", () => {
-    const [b] = bindingsFromArgs(["--agent", "a1", "--key", "k", "--im-url", "http://x", "--runtime", "workbuddy"]);
+    const b = bindingsFromArgs(["--agent", "a1", "--key", "k", "--im-url", "http://x", "--runtime", "workbuddy"])[0]!;
     expect(b.runtimeKind).toBe("workbuddy");
     expect(b.consumerId).toBe("mingle-runtime-a1-workbuddy");
   });
