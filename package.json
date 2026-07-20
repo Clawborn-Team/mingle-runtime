@@ -1,6 +1,6 @@
 {
   "name": "@clawborn/mingle-runtime",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Local Mingle Runtime daemon — drives real provider integrations (Codex App Server, Claude Agent SDK, OpenClaw) behind a unified AgentRuntimeDriver contract.",
   "type": "module",
   "private": false,
