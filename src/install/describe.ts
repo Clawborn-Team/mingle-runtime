@@ -64,7 +64,7 @@ const DESCRIPTORS: Record<RuntimeKind, InstallDescriptor> = {
   },
   workbuddy: {
     kind: "workbuddy",
-    label: "WorkBuddy (CodeBuddy ACP)",
+    label: "WorkBuddy",
     summary: "通过 CodeBuddy ACP server 驱动，每个 scope 对应一个 ACP session，自动批准权限。",
     details: [
       "以 stdio 启动 codebuddy --acp，JSON-RPC 驱动 session/new|load|prompt。",

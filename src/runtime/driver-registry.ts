@@ -9,11 +9,13 @@ import type { AgentRuntimeDriver, RuntimeCapabilities, RuntimeKind } from "./dri
 import { CodexAppServerDriver, type CodexDriverOptions } from "../codex/driver.js";
 import { ClaudeAgentDriver, type ClaudeDriverOptions } from "../claude/driver.js";
 import { OpenClawDriver, type OpenClawDriverOptions } from "../openclaw/driver.js";
+import { WorkBuddyAcpDriver, type WorkBuddyDriverOptions } from "../workbuddy/driver.js";
 
 export type DriverDeps = {
   codex?: CodexDriverOptions;
   claude?: ClaudeDriverOptions;
   openclaw?: OpenClawDriverOptions;
+  workbuddy?: WorkBuddyDriverOptions;
 };
 
 export function resolveDriver(kind: RuntimeKind, deps: DriverDeps): AgentRuntimeDriver {
@@ -28,7 +30,8 @@ export function resolveDriver(kind: RuntimeKind, deps: DriverDeps): AgentRuntime
       if (!deps.openclaw) throw new Error("resolveDriver: openclaw deps (gateway) required for the openclaw driver");
       return new OpenClawDriver(deps.openclaw);
     case "workbuddy":
-      throw new Error("resolveDriver: workbuddy is not wired through the registry — construct WorkBuddyAcpDriver directly via factory");
+      if (!deps.workbuddy) throw new Error("resolveDriver: workbuddy deps (client) required for the workbuddy driver");
+      return new WorkBuddyAcpDriver(deps.workbuddy);
   }
 }
 

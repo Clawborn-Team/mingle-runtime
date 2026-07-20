@@ -25,6 +25,8 @@ import { loadAuthoredPersona } from "./definition.js";
 import { loadClaudeQuery, buildMingleMcpServer } from "../claude/real-query.js";
 import { spawnCodexAppServer, type SpawnedAppServer } from "../codex/spawn.js";
 import { CodexAppServerClient } from "../codex/client.js";
+import { spawnWorkBuddyAcp } from "../workbuddy/spawn.js";
+import { WorkBuddyAcpClient } from "../workbuddy/client.js";
 
 function defaultSessionDbPath(): string {
   const dir = process.env.MINGLE_CONFIG_DIR || join(homedir(), ".mingle");
@@ -94,11 +96,20 @@ export async function resolveInstalledDriver(
         "openclaw runs via the openclaw-mingle plugin, not `mingle-runtime start`. " +
           "Use the OpenClaw install command from the Bind Agent flow.",
       );
-    case "workbuddy":
-      throw new Error(
-        "workbuddy is not launched via `mingle-runtime start` — construct WorkBuddyAcpDriver " +
-          "directly with a spawnWorkBuddyAcp() connection.",
-      );
+    case "workbuddy": {
+      const server = spawnWorkBuddyAcp();
+      const client = new WorkBuddyAcpClient(server.connection);
+      const { loadSession } = await client.initialize({ name: "mingle-runtime", version: "0" });
+      const driver = resolveDriver("workbuddy", {
+        workbuddy: {
+          client,
+          loadSession,
+          cwd: ib.dir ? expandHome(ib.dir) : process.cwd(),
+          persona,
+        },
+      });
+      return { driver, dispose: () => server.stop() };
+    }
   }
 }
 

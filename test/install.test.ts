@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { describeInstall, ALL_RUNTIME_KINDS } from "../src/install/describe.js";
+import { bindingsFromArgs } from "../src/install/config.js";
 
 describe("describeInstall (unified, honest install facts §9.1)", () => {
   it("describes each runtime kind", () => {
@@ -42,5 +43,18 @@ describe("describeInstall (unified, honest install facts §9.1)", () => {
     const text = JSON.stringify(d).toLowerCase();
     expect(text).toContain("gateway");
     expect(text).not.toContain("scrape");
+  });
+
+  it("lists workbuddy as an installable runtime with honest copy", () => {
+    expect(ALL_RUNTIME_KINDS).toContain("workbuddy");
+    const d = describeInstall("workbuddy");
+    expect(d.label).toBe("WorkBuddy");
+    expect(d.summary.length).toBeGreaterThan(0);
+  });
+
+  it("parses --runtime workbuddy into a binding", () => {
+    const [b] = bindingsFromArgs(["--agent", "a1", "--key", "k", "--im-url", "http://x", "--runtime", "workbuddy"]);
+    expect(b.runtimeKind).toBe("workbuddy");
+    expect(b.consumerId).toBe("mingle-runtime-a1-workbuddy");
   });
 });

@@ -26,4 +26,10 @@ describe("driver registry", () => {
     expect(driverCapabilities("codex").streaming).toBe(true);
     expect(driverCapabilities("claude-code").resume).toBe(true);
   });
+
+  it("declares honest workbuddy capabilities (no fileChanges in v1)", () => {
+    expect(driverCapabilities("workbuddy")).toEqual({
+      streaming: true, tools: true, approvals: true, fileChanges: false, resume: true,
+    });
+  });
 });
