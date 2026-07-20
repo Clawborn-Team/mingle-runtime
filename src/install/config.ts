@@ -31,6 +31,15 @@ export function defaultConfigPath(): string {
   return join(process.env.MINGLE_CONFIG_DIR || join(homedir(), ".mingle"), "config.json");
 }
 
+/** Expand a leading `~` to the home dir. The install command quotes `--dir '~/x'`,
+ *  so the shell never expands it and we receive a literal tilde — an invalid cwd
+ *  that breaks the provider (e.g. the Claude SDK can't chdir to it). Resolve it. */
+export function expandHome(p: string): string {
+  if (p === "~") return homedir();
+  if (p.startsWith("~/") || p.startsWith("~\\")) return join(homedir(), p.slice(2));
+  return p;
+}
+
 export async function loadConfig(path = defaultConfigPath()): Promise<RuntimeConfig> {
   try {
     const parsed = JSON.parse(await fs.readFile(path, "utf8")) as RuntimeConfig;
@@ -87,7 +96,7 @@ export function bindingsFromArgs(args: string[]): InstalledBinding[] {
     key,
     imUrl,
     runtimeKind: runtime as RuntimeKind,
-    ...(flags.dir ? { dir: flags.dir } : {}),
+    ...(flags.dir ? { dir: expandHome(flags.dir) } : {}),
     ...(flags.model ? { model: flags.model } : {}),
     consumerId: `mingle-runtime-${agentId}-${runtime}`,
   }));

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { join } from "node:path";
 import {
   bindingsFromArgs,
@@ -39,6 +39,14 @@ describe("bindingsFromArgs", () => {
       "--agent", "a", "--key", "k", "--im-url", "https://r", "--runtime", "codex", "--dir", "/repo", "--model", "gpt-x",
     ]);
     expect(b).toMatchObject({ dir: "/repo", model: "gpt-x" });
+  });
+
+  it("expands a leading ~ in --dir (the install command quotes it, so the shell won't)", () => {
+    const [b] = bindingsFromArgs([
+      "--agent", "a", "--key", "k", "--im-url", "https://r", "--runtime", "claude-code", "--dir", "~/codebase/im",
+    ]);
+    expect(b!.dir).toBe(join(homedir(), "codebase/im"));
+    expect(b!.dir).not.toContain("~"); // never a literal tilde (breaks the provider cwd)
   });
 
   it("rejects a missing required flag", () => {
