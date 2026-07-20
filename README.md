@@ -4,8 +4,9 @@ The local **Mingle Runtime** daemon: it drives real provider integrations
 behind a unified `AgentRuntimeDriver` contract, replacing the old
 "常驻连接器 + headless 驱动" model (which shelled out to `claude` / `codex exec`
 and scraped stdout). Providers run as persistent, resumable, **per-scope
-sessions** — Codex **App Server** (stdio JSON-RPC) and Claude **Agent SDK**
-(explicit `session_id` + resume); OpenClaw becomes one adapter.
+sessions** — Codex **App Server** (stdio JSON-RPC), Claude **Agent SDK**
+(explicit `session_id` + resume), and **WorkBuddy** (Tencent CodeBuddy's
+`codebuddy --acp`, ACP over stdio); OpenClaw becomes one adapter.
 
 Design source of truth:
 `im/docs/superpowers/specs/2026-07-19-mingle-agent-runtime-platform-design.md`
@@ -22,10 +23,10 @@ The im-web **Bind Agent** flow generates these for you; you can also run them by
 Bind one or more providers to your agent, then start the daemon:
 
 ```bash
-# bind Claude (Agent SDK) and/or Codex (App Server) to your Mingle agent
+# bind Claude (Agent SDK), Codex (App Server), and/or WorkBuddy (CodeBuddy ACP) to your agent
 npx --yes -p https://github.com/Clawborn-Team/mingle-runtime/releases/latest/download/mingle-runtime.tgz \
   mingle-runtime add --agent <agentId> --key <apiKey> --im-url <imServerUrl> \
-  --runtime claude-code,codex [--dir <repoPath>] [--model <model>]
+  --runtime claude-code,codex,workbuddy [--dir <repoPath>] [--model <model>]
 
 # launch the long-running daemon (drives every bound agent)
 npx --yes -p https://github.com/Clawborn-Team/mingle-runtime/releases/latest/download/mingle-runtime.tgz \
@@ -36,8 +37,9 @@ npx --yes -p https://github.com/Clawborn-Team/mingle-runtime/releases/latest/dow
 api-key). `start` long-polls the Account Event Center per binding, drives one turn per
 wake through the real provider, and delivers replies. Provider credentials stay with the
 provider — Codex reads its own keychain; Claude uses `ANTHROPIC_API_KEY` (or Bedrock /
-Vertex), never a claude.ai subscription. **OpenClaw** installs via the `openclaw-mingle`
-plugin, not this CLI.
+Vertex), never a claude.ai subscription. **WorkBuddy** reuses the CodeBuddy CLI's own
+Tencent login (the daemon finds the `codebuddy` CLI on PATH, or the one embedded in the
+WorkBuddy desktop app). **OpenClaw** installs via the `openclaw-mingle` plugin, not this CLI.
 
 ## Status — Increment A1 (protocol + driver contract + registry + consumer)
 
@@ -138,6 +140,31 @@ Shipped in A3 (spec §5.5 + the same hardening bar as A2):
   / "claude -p" wording and no claude.ai subscription claim. This is the source of
   truth for the bind-agent copy rewrite (drafted separately, shipped to im-web after
   team-lead approval).
+
+## Status — Increment A5 (WorkBuddy / CodeBuddy ACP driver)
+
+Tencent **WorkBuddy** as a Local Agent, verified end-to-end against WorkBuddy 2.106.4
+(codebuddy 2.106.4) + a real im-server:
+
+- **`WorkBuddyAcpDriver`** (`src/workbuddy/driver.ts`) — drives `codebuddy --acp` (ACP =
+  JSON-RPC over stdio). A scope_key maps to an ACP session; one wake runs one
+  `session/prompt`; `session/update` notifications (`agent_message_chunk`, `tool_call`)
+  map to `RuntimeEvent`s via the pure mapper (`src/workbuddy/updates.ts`, unmodelled
+  updates ignored). Reply-text path only (v1); resume via `session/load` when the agent
+  advertises `loadSession`, else it throws honestly. Reuses the codex `jsonrpc-stdio`
+  transport; client in `src/workbuddy/client.ts`.
+- **Launcher** (`src/workbuddy/spawn.ts`) — `codebuddy` is often NOT on PATH; it ships
+  **embedded in the WorkBuddy desktop app**. `resolveCodebuddyLauncher()` prefers a PATH
+  `codebuddy`, else runs the app's embedded CLI via its bundled Electron in Node mode
+  (macOS `/Applications/WorkBuddy.app`; override with `WORKBUDDY_APP` / `WORKBUDDY_CODEBUDDY`).
+- **YOLO + workspace cwd** — spawns `--permission-mode bypassPermissions` (tool use never
+  blocks) and sets the **child process cwd** = the binding dir, because codebuddy's tools
+  operate in the process cwd, NOT the `session/new` cwd param (verified live).
+- **Tests** drive a **real** `codebuddy` (no fake), gated by a loud preflight skip when
+  absent: initialize/session smoke, a full-daemon e2e (owner DM → reply) and a YOLO tool
+  turn (DM → agent writes a file into its workspace). Registered as runtime kind
+  `workbuddy` (registry + `describe.ts` + factory); `setup` prints a WorkBuddy-specific
+  onboarding guide (persist into `~/.workbuddy/skills`, then mirror identity to Mingle).
 
 ## Next
 
