@@ -52,6 +52,18 @@ describe("processWake", () => {
     expect(driver.openedScopes).toEqual(["dm:p1"]);
   });
 
+  it("emits truthful DM activity: thinking when the turn starts, cleared (done) on completion", async () => {
+    const registry = new InMemorySessionRegistry();
+    const driver = new FakeDriver({ reply: "hi" });
+    const im = fakeImClient([]);
+    const acts: string[] = [];
+    (im as unknown as { postActivity: (p: string, s: string) => Promise<void> }).postActivity = async (_p, s) => {
+      acts.push(s);
+    };
+    await processWake({ packet: parseWakePacket(dmWakePacket), binding, driver, registry, imClient: im });
+    expect(acts).toEqual(["thinking", "done"]); // set on turn.started, cleared on completion
+  });
+
   it("RESUMES the same scope on a second wake (no new session)", async () => {
     const registry = new InMemorySessionRegistry();
     const driver = new FakeDriver();

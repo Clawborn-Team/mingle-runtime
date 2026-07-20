@@ -88,6 +88,19 @@ export function createHttpEventCenterClient(cfg: HttpClientConfig): EventCenterC
       return { ok: res.status === 201, status: res.status };
     },
 
+    async postActivity(peerId, state, detail) {
+      // Best-effort ephemeral presence; never let it break a turn.
+      try {
+        await doFetch(`${base}/v1/activity`, {
+          method: "POST",
+          headers: auth,
+          body: JSON.stringify({ peer_id: peerId, state, ...(detail ? { detail } : {}) }),
+        });
+      } catch {
+        /* ignore */
+      }
+    },
+
     /** Post a reply to a channel by slug. If we're not a member yet (403), join
      *  once and retry — mirrors mingle-hosted-agent's proven channel-reply path. */
     async postToChannel(slug, body) {

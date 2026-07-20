@@ -49,6 +49,9 @@ export interface EventCenterClient {
   sendDm(to: string, body: string): Promise<{ ok: boolean; status: number }>;
   /** Post a reply back to a channel (group/plaza @ + follow-up, P1-3). */
   postToChannel(channelId: string, body: string): Promise<{ ok: boolean; status: number }>;
+  /** Report ephemeral turn activity to a DM peer (truthful thinking indicator). Optional
+   *  (best-effort presence) so test fakes needn't implement it; `done`/`failed` clear it. */
+  postActivity?(peerId: string, state: "thinking" | "tool" | "done" | "failed", detail?: string): Promise<void>;
 }
 
 /** Whether a turn's reply reached its target. `unsupported` means the reply
@@ -96,11 +99,26 @@ export async function processWake(input: ProcessWakeInput): Promise<ProcessWakeR
     });
   }
 
+  // Truthful activity signal: only a DM has a single peer to notify. Emit as the turn
+  // actually runs (thinking on start, tool on tool.started) and clear on completion —
+  // best-effort, never blocks the turn (spec §B).
+  const rt = packet.conversation?.reply_target;
+  const peerId = rt?.kind === "dm" ? rt.peer_id : undefined;
+  const activity = (state: "thinking" | "tool" | "done" | "failed", detail?: string) => {
+    if (peerId) void imClient.postActivity?.(peerId, state, detail).catch(() => {});
+  };
+
   const events: RuntimeEvent[] = [];
   let reply: string | undefined;
-  for await (const ev of driver.runTurn({ session, packet })) {
-    events.push(ev);
-    if (ev.type === "turn.completed" && ev.text) reply = ev.text;
+  try {
+    for await (const ev of driver.runTurn({ session, packet })) {
+      events.push(ev);
+      if (ev.type === "turn.started") activity("thinking");
+      else if (ev.type === "tool.started") activity("tool", "name" in ev ? ev.name : undefined);
+      if (ev.type === "turn.completed" && ev.text) reply = ev.text;
+    }
+  } finally {
+    activity(events.some((e) => e.type === "turn.failed") ? "failed" : "done");
   }
 
   await registry.touch(binding.bindingId, scopeKey, {
