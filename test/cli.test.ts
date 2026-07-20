@@ -49,12 +49,15 @@ describe("runCli", () => {
     expect(started).toHaveLength(0);
   });
 
-  it("`start` loads the config and launches the runtime, awaiting it", async () => {
+  it("`start` loads the config and launches the runtime (as a singleton), awaiting it", async () => {
     await runCli(["add", "--agent", "a", "--key", "k", "--im-url", "https://r", "--runtime", "codex"], { configPath, log });
     let launchedWith: number | undefined;
+    let ensured = false;
     const code = await runCli(["start"], {
       configPath,
       log,
+      ensureSingleton: async () => { ensured = true; },
+      releaseSingleton: () => {},
       startRuntime: async (c) => {
         launchedWith = c.bindings.length;
         return { done: Promise.resolve(), stop: async () => {} };
@@ -62,6 +65,21 @@ describe("runCli", () => {
     });
     expect(code).toBe(0);
     expect(launchedWith).toBe(1);
+    expect(ensured).toBe(true); // singleton claimed before launch
+  });
+
+  it("`setup` persists the binding and prints onboarding steps (name/intent + PATCH)", async () => {
+    const code = await runCli(
+      ["setup", "--agent", "agt", "--key", "k", "--im-url", "https://r", "--runtime", "claude-code", "--install-url", "https://x.tgz"],
+      { configPath, log },
+    );
+    expect(code).toBe(0);
+    const out = logs.join("\n");
+    expect(out).toMatch(/onboard/i);
+    expect(out).toContain("mingle-runtime start"); // step 1: launch daemon
+    expect(out).toContain("/v1/me"); // step 2: save profile
+    expect(out).toContain("agt");
+    expect(out).not.toContain('"k"'); // the api-key is read from config, never printed
   });
 
   it("unknown command prints usage with non-zero", async () => {

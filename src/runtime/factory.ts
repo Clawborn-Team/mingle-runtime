@@ -56,7 +56,11 @@ export async function resolveInstalledDriver(
         claude: {
           query,
           cwd: ib.dir ? expandHome(ib.dir) : process.cwd(),
-          allowedTools: [],
+          // YOLO (open the aperture): bypass permission prompts + no tool deny-list,
+          // so the Local Agent can actually act on the owner's behalf. Revisit once we
+          // see the effect (§5.5 honest-auth still holds; this is permissions, not auth).
+          permissionMode: "bypassPermissions",
+          deniedTools: [],
           persona: DEFAULT_LOCAL_AGENT_PERSONA,
           ...(mcpServers ? { mcpServers } : {}),
           ...(ib.model ? { model: ib.model } : {}),
@@ -69,7 +73,15 @@ export async function resolveInstalledDriver(
       const client = new CodexAppServerClient(server.connection);
       await client.initialize({ name: "mingle-runtime", version: "0" });
       const driver = resolveDriver("codex", {
-        codex: { client, persona: DEFAULT_LOCAL_AGENT_PERSONA, ...(ib.model ? { model: ib.model } : {}) },
+        codex: {
+          client,
+          persona: DEFAULT_LOCAL_AGENT_PERSONA,
+          // YOLO: never pause for approval so the agent acts without blocking. (Sandbox
+          // left at codex's default — the app-server's SandboxPolicy is a kebab-tagged
+          // enum the client type doesn't model yet; widening it is a follow-up.)
+          approvalPolicy: "never",
+          ...(ib.model ? { model: ib.model } : {}),
+        },
       });
       return { driver, dispose: () => server.stop() };
     }

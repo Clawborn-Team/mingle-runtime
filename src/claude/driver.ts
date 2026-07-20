@@ -41,6 +41,8 @@ export type ClaudeDriverOptions = {
   deniedTools?: string[];
   /** Local Agent persona prepended to each turn (so Claude answers as this agent). */
   persona?: string;
+  /** SDK permission mode. "bypassPermissions" = YOLO (no prompts, full access). */
+  permissionMode?: string;
 };
 
 const DEFAULT_DENIED = ["Bash"];
@@ -103,6 +105,7 @@ export class ClaudeAgentDriver implements AgentRuntimeDriver {
       ...(this.opts.allowedTools ? { allowedTools: this.opts.allowedTools } : {}),
       ...(this.opts.mcpServers ? { mcpServers: this.opts.mcpServers } : {}),
       ...(this.opts.model ? { model: this.opts.model } : {}),
+      ...(this.opts.permissionMode ? { permissionMode: this.opts.permissionMode } : {}),
       canUseTool: this.buildCanUseTool(),
     };
 
