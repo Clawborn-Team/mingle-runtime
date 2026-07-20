@@ -21,6 +21,7 @@ import type { EventCenterClient } from "./consumer.js";
 import { expandHome, type InstalledBinding, type RuntimeConfig } from "../install/config.js";
 import { createHttpEventCenterClient } from "../im/http-client.js";
 import { DEFAULT_LOCAL_AGENT_PERSONA } from "./persona.js";
+import { loadAuthoredPersona } from "./definition.js";
 import { loadClaudeQuery, buildMingleMcpServer } from "../claude/real-query.js";
 import { spawnCodexAppServer, type SpawnedAppServer } from "../codex/spawn.js";
 import { CodexAppServerClient } from "../codex/client.js";
@@ -37,6 +38,9 @@ export async function resolveInstalledDriver(
   ib: InstalledBinding,
   imClient: EventCenterClient,
 ): Promise<{ driver: AgentRuntimeDriver; dispose?: () => void }> {
+  // The owner-authored local definition IS who this agent is; the default persona
+  // only applies when nothing was authored (product-vision two-tier model).
+  const persona = (await loadAuthoredPersona(ib)) ?? DEFAULT_LOCAL_AGENT_PERSONA;
   switch (ib.runtimeKind) {
     case "claude-code": {
       const query = await loadClaudeQuery();
@@ -61,7 +65,7 @@ export async function resolveInstalledDriver(
           // see the effect (§5.5 honest-auth still holds; this is permissions, not auth).
           permissionMode: "bypassPermissions",
           deniedTools: [],
-          persona: DEFAULT_LOCAL_AGENT_PERSONA,
+          persona,
           ...(mcpServers ? { mcpServers } : {}),
           ...(ib.model ? { model: ib.model } : {}),
         },
@@ -75,7 +79,7 @@ export async function resolveInstalledDriver(
       const driver = resolveDriver("codex", {
         codex: {
           client,
-          persona: DEFAULT_LOCAL_AGENT_PERSONA,
+          persona,
           // YOLO: never pause for approval so the agent acts without blocking. (Sandbox
           // left at codex's default — the app-server's SandboxPolicy is a kebab-tagged
           // enum the client type doesn't model yet; widening it is a follow-up.)
