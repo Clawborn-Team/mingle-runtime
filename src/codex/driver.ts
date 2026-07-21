@@ -69,6 +69,7 @@ export class CodexAppServerDriver implements AgentRuntimeDriver {
     approvals: true,
     fileChanges: true,
     resume: true,
+    imageInputs: "local-file",
   };
 
   private readonly codex: CodexAppServerClient;

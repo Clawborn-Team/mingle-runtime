@@ -1,3 +1,4 @@
+import { access } from "node:fs/promises";
 import { describe, it, expect } from "vitest";
 import { processWake, runBindingOnce, type EventCenterClient, type UpdatesResult } from "../src/runtime/consumer.js";
 import { InMemorySessionRegistry } from "../src/runtime/session-registry.js";
@@ -62,6 +63,26 @@ describe("processWake", () => {
     };
     await processWake({ packet: parseWakePacket(dmWakePacket), binding, driver, registry, imClient: im });
     expect(acts).toEqual(["thinking", "done"]); // set on turn.started, cleared on completion
+  });
+
+  it("keeps downloaded images available for exactly the provider turn, then removes them", async () => {
+    const registry = new InMemorySessionRegistry();
+    const im = fakeImClient([]);
+    im.downloadMedia = async () => ({ bytes: Buffer.from("fake-webp"), contentType: "image/webp" });
+    const raw = structuredClone(dmWakePacket) as any;
+    raw.wake.event.payload.message.attachments = [{ id: "media-turn", kind: "image" }];
+    let localPath = "";
+    const driver = new FakeDriver({ reply: "看到了" });
+    driver.runTurn = async function* ({ packet }) {
+      localPath = (packet.wake.event!.payload!.message as any).attachments[0].local_path;
+      await expect(access(localPath)).resolves.toBeUndefined();
+      yield { type: "turn.started", turnId: "image-turn" };
+      yield { type: "turn.completed", turnId: "image-turn", text: "看到了" };
+    };
+
+    await processWake({ packet: parseWakePacket(raw), binding, driver, registry, imClient: im });
+
+    await expect(access(localPath)).rejects.toThrow();
   });
 
   it("RESUMES the same scope on a second wake (no new session)", async () => {

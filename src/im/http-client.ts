@@ -88,6 +88,18 @@ export function createHttpEventCenterClient(cfg: HttpClientConfig): EventCenterC
       return { ok: res.status === 201, status: res.status };
     },
 
+    async downloadMedia(mediaId) {
+      const res = await doFetch(`${base}/v1/media/${encodeURIComponent(mediaId)}/content`, {
+        headers: { Authorization: `Bearer ${cfg.key}` },
+        redirect: "follow",
+      });
+      if (!res.ok) throw new Error(`media download failed: ${res.status}`);
+      return {
+        bytes: Buffer.from(await res.arrayBuffer()),
+        contentType: res.headers.get("content-type") ?? "application/octet-stream",
+      };
+    },
+
     async reportOwnerContext(status) {
       try {
         await doFetch(`${base}/v1/me/runtime-status`, {

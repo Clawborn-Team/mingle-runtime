@@ -56,6 +56,7 @@ export class ClaudeAgentDriver implements AgentRuntimeDriver {
     approvals: true,
     fileChanges: true,
     resume: true,
+    imageInputs: "local-file",
   };
 
   private readonly query: QueryFn;

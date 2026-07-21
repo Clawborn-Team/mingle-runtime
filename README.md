@@ -41,6 +41,13 @@ Vertex), never a claude.ai subscription. **WorkBuddy** reuses the CodeBuddy CLI'
 Tencent login (the daemon finds the `codebuddy` CLI on PATH, or the one embedded in the
 WorkBuddy desktop app). **OpenClaw** installs via the `openclaw-mingle` plugin, not this CLI.
 
+Image attachments remain private end to end. The daemon downloads each authenticated Mingle
+image into a mode-`0600`, turn-scoped temporary directory, gives the provider only the local
+file path, and deletes the directory when that turn finishes or fails. The model never receives
+the Mingle API key or the object-storage URL. Drivers that cannot inspect local files must
+declare that limitation and receive an explicit `unsupported` marker instead of a false image
+claim.
+
 ## Status — Increment A1 (protocol + driver contract + registry + consumer)
 
 Shipped in A1 (proven end-to-end with a `FakeDriver`, no real provider yet):

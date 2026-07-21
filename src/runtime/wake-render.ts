@@ -111,6 +111,17 @@ function renderImmediateEvent(packet: WakePacket): string {
   const body = bodyOf(event);
   out.push("- message:");
   out.push(body ? indent(body) : indent("(no text body on this event)"));
+  const attachments = attachmentsOf(event);
+  if (attachments.length > 0) {
+    out.push("- Attachments (trusted files downloaded by Mingle Runtime):");
+    for (const attachment of attachments) {
+      const id = typeof attachment.id === "string" ? attachment.id : "unknown";
+      const path = typeof attachment.local_path === "string" ? attachment.local_path : undefined;
+      const availability = attachment.availability === "unsupported" ? "unsupported by this runtime" : "available";
+      out.push(indent(`image ${id}: ${path ?? availability}`));
+    }
+    out.push(indent("Inspect available local files when understanding the message; do not claim to see an unsupported image."));
+  }
   return out.join("\n");
 }
 
@@ -160,6 +171,13 @@ function senderOf(event: WakeEvent): string | undefined {
 function bodyOf(event: WakeEvent): string | undefined {
   const body = (event.payload as { message?: { body?: unknown } } | undefined)?.message?.body;
   return typeof body === "string" && body.trim() ? body : undefined;
+}
+
+function attachmentsOf(event: WakeEvent): Array<Record<string, unknown>> {
+  const value = (event.payload as { message?: { attachments?: unknown } } | undefined)?.message?.attachments;
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    : [];
 }
 
 function compactPayload(payload: Record<string, unknown> | undefined): string {

@@ -38,10 +38,10 @@ export function resolveDriver(kind: RuntimeKind, deps: DriverDeps): AgentRuntime
 /** Static capability descriptor per kind — for honest UI degrade without needing
  *  to construct a driver (or its provider deps). Kept in sync with each driver. */
 const CAPABILITIES: Record<RuntimeKind, RuntimeCapabilities> = {
-  codex: { streaming: true, tools: true, approvals: true, fileChanges: true, resume: true },
-  "claude-code": { streaming: true, tools: true, approvals: true, fileChanges: true, resume: true },
-  openclaw: { streaming: false, tools: true, approvals: false, fileChanges: false, resume: true },
-  workbuddy: { streaming: true, tools: true, approvals: true, fileChanges: false, resume: true },
+  codex: { streaming: true, tools: true, approvals: true, fileChanges: true, resume: true, imageInputs: "local-file" },
+  "claude-code": { streaming: true, tools: true, approvals: true, fileChanges: true, resume: true, imageInputs: "local-file" },
+  openclaw: { streaming: false, tools: true, approvals: false, fileChanges: false, resume: true, imageInputs: "local-file" },
+  workbuddy: { streaming: true, tools: true, approvals: true, fileChanges: false, resume: true, imageInputs: "local-file" },
 };
 
 export function driverCapabilities(kind: RuntimeKind): RuntimeCapabilities {

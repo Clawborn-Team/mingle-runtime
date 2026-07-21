@@ -76,6 +76,20 @@ describe("HttpEventCenterClient", () => {
     expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({ to: "acc_peer", body: "hi" });
   });
 
+  it("downloads private media with the runtime credential", async () => {
+    const calls: Call[] = [];
+    const impl = (async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(Buffer.from("image-bytes"), { status: 200, headers: { "Content-Type": "image/webp" } });
+    }) as typeof fetch;
+    const client = createHttpEventCenterClient({ ...base, fetchImpl: impl });
+    const result = await client.downloadMedia!("media-1");
+    expect(result.contentType).toBe("image/webp");
+    expect(result.bytes.toString()).toBe("image-bytes");
+    expect(calls[0]!.url).toContain("/v1/media/media-1/content");
+    expect((calls[0]!.init!.headers as Record<string, string>).Authorization).toBe("Bearer k_secret");
+  });
+
   it("reports owner-context preparation status without exposing session material", async () => {
     const { impl, calls } = fakeFetch({ "/v1/me/runtime-status": { status: 200 } });
     const client = createHttpEventCenterClient({ ...base, fetchImpl: impl });

@@ -45,7 +45,7 @@ class EventQueue {
 export class WorkBuddyAcpDriver implements AgentRuntimeDriver {
   readonly kind = "workbuddy" as const;
   readonly capabilities: RuntimeCapabilities = {
-    streaming: true, tools: true, approvals: true, fileChanges: false, resume: true,
+    streaming: true, tools: true, approvals: true, fileChanges: false, resume: true, imageInputs: "local-file",
   };
 
   private readonly client: WorkBuddyAcpClient;

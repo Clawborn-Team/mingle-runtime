@@ -82,4 +82,19 @@ describe("renderWakeInput (P1-5 — one trusted Wake Packet → provider input)"
     expect(text).not.toContain("Write your reply to this event as your FINAL");
     expect(ownerContextTask(parseWakePacket(packet))).toMatchObject({ mode: "recent-briefing", days: 7 });
   });
+
+  it("grounds a materialized local image path separately from message text", () => {
+    const raw = structuredClone(dmWakePacket) as any;
+    raw.wake.event.payload.message.attachments = [{
+      id: "media-1",
+      kind: "image",
+      content_type: "image/webp",
+      local_path: "/tmp/mingle-media-turn/media-1.webp",
+      availability: "local-file",
+    }];
+    const prompt = renderWakeInput(parseWakePacket(raw));
+    expect(prompt).toContain("Attachments (trusted files downloaded by Mingle Runtime)");
+    expect(prompt).toContain("/tmp/mingle-media-turn/media-1.webp");
+    expect(prompt).toContain("media-1");
+  });
 });

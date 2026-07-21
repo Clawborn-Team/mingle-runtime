@@ -16,6 +16,7 @@ import { deriveScopeKey } from "../protocol/scope.js";
 import type { RuntimeUpdateDirective } from "./self-update.js";
 import type { AgentRuntimeDriver, ProviderSession, RuntimeEvent } from "./driver.js";
 import type { RuntimeKind, SessionRegistry } from "./session-registry.js";
+import { materializeWakeMedia } from "./media-materializer.js";
 
 /** One agent binding the runtime drives. */
 export type Binding = {
@@ -47,6 +48,7 @@ export interface EventCenterClient {
    *  dead-letters it (mirrors im-server's per-event delivery discipline). */
   nack(eventId: string, reason: string): Promise<void>;
   sendDm(to: string, body: string): Promise<{ ok: boolean; status: number }>;
+  downloadMedia?(mediaId: string): Promise<{ bytes: Buffer; contentType: string }>;
   /** Post a reply back to a channel (group/plaza @ + follow-up, P1-3). */
   postToChannel(channelId: string, body: string): Promise<{ ok: boolean; status: number }>;
   /** Report ephemeral turn activity to a DM peer (truthful thinking indicator). Optional
@@ -113,8 +115,12 @@ export async function processWake(input: ProcessWakeInput): Promise<ProcessWakeR
 
   const events: RuntimeEvent[] = [];
   let reply: string | undefined;
+  const materialized = await materializeWakeMedia(packet, {
+    imageInputs: driver.capabilities.imageInputs,
+    downloadMedia: imClient.downloadMedia?.bind(imClient),
+  });
   try {
-    for await (const ev of driver.runTurn({ session, packet })) {
+    for await (const ev of driver.runTurn({ session, packet: materialized.packet })) {
       events.push(ev);
       if (ev.type === "turn.started") activity("thinking");
       else if (ev.type === "tool.started") activity("tool", "name" in ev ? ev.name : undefined);
@@ -122,6 +128,7 @@ export async function processWake(input: ProcessWakeInput): Promise<ProcessWakeR
     }
   } finally {
     activity(events.some((e) => e.type === "turn.failed") ? "failed" : "done");
+    await materialized.cleanup();
   }
 
   await registry.touch(binding.bindingId, scopeKey, {

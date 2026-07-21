@@ -29,7 +29,7 @@ describe("driver registry", () => {
 
   it("declares honest workbuddy capabilities (no fileChanges in v1)", () => {
     expect(driverCapabilities("workbuddy")).toEqual({
-      streaming: true, tools: true, approvals: true, fileChanges: false, resume: true,
+      streaming: true, tools: true, approvals: true, fileChanges: false, resume: true, imageInputs: "local-file",
     });
   });
 });

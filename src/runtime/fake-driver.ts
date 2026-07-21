@@ -33,6 +33,7 @@ export class FakeDriver implements AgentRuntimeDriver {
     approvals: true,
     fileChanges: false,
     resume: true,
+    imageInputs: "local-file",
   };
 
   /** Observable side effects for tests. */

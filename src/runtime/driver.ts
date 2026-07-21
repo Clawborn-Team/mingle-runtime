@@ -31,6 +31,7 @@ export type RuntimeCapabilities = {
   approvals: boolean;
   fileChanges: boolean;
   resume: boolean;
+  imageInputs: "local-file" | "unsupported";
 };
 
 export type RuntimeProbe = {

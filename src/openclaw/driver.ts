@@ -40,6 +40,7 @@ export class OpenClawDriver implements AgentRuntimeDriver {
     approvals: false,
     fileChanges: false,
     resume: true,
+    imageInputs: "local-file",
   };
 
   private readonly gateway: OpenClawGateway;
