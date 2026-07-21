@@ -61,6 +61,52 @@ describe("ClaudeAgentDriver", () => {
     expect(events.at(-1)?.type).toBe("turn.failed");
   });
 
+  it("intercepts native AskUserQuestion → question.raised, ends the round cleanly (no tool.started, no text reply)", async () => {
+    const query = fakeClaudeQuery("tool-use", {
+      sessionId: "sess-q",
+      reply: "SHOULD_NOT_BE_DELIVERED",
+      toolUse: {
+        name: "AskUserQuestion",
+        input: {
+          questions: [
+            {
+              question: "选哪个方案？",
+              header: "方案",
+              multiSelect: false,
+              options: [
+                { label: "方案 A", description: "更快" },
+                { label: "方案 B", description: "更稳" },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    const driver = new ClaudeAgentDriver({ query, cwd: "/tmp/ws" });
+    const session = await driver.openSession({ bindingId: "b1", scopeKey: "dm:p1" });
+    const events = await collect(driver.runTurn({ session, packet: parseWakePacket(dmWakePacket) }));
+
+    const raised = events.find((e) => e.type === "question.raised");
+    expect(raised).toBeTruthy();
+    expect((raised as any).block).toMatchObject({
+      type: "question",
+      prompt: "选哪个方案？",
+      allow_multiple: false,
+      status: "open",
+      options: [
+        { id: expect.any(String), label: "方案 A" },
+        { id: expect.any(String), label: "方案 B" },
+      ],
+    });
+    // AskUserQuestion is intercepted, not surfaced as a normal tool call
+    expect(events.find((e) => e.type === "tool.started")).toBeUndefined();
+    // the round ends cleanly and does NOT deliver the trailing text as a reply
+    expect(events.at(-1)?.type).toBe("turn.completed");
+    expect(events.find((e) => e.type === "turn.failed")).toBeUndefined();
+    const done = events.at(-1) as any;
+    expect(done.text ?? "").not.toContain("SHOULD_NOT_BE_DELIVERED");
+  });
+
   it("resumes by explicit session_id and NEVER uses continue:true (§5.5)", async () => {
     const { driver, calls } = makeDriver("reply", { sessionId: "sess-abc" });
     const session = await driver.openSession({ bindingId: "b1", scopeKey: "dm:p1" });

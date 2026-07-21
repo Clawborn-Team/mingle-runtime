@@ -17,6 +17,9 @@ export type FakeClaudeOptions = {
   sessionId?: string;
   /** Kept for call sites that opt into fresh-per-session ids explicitly. */
   sessionIdPerScope?: boolean;
+  /** For the "tool-use" script: emit this tool_use block instead of the default Read.
+   *  Used to exercise native AskUserQuestion interception. */
+  toolUse?: { name: string; input: unknown };
   onCall?: (call: { prompt: string; options?: QueryOptions }) => void;
 };
 
@@ -50,10 +53,11 @@ export function fakeClaudeQuery(script: FakeScript = "reply", opts: FakeClaudeOp
     }
 
     if (script === "tool-use") {
+      const tu = opts.toolUse ?? { name: "Read", input: { path: "x" } };
       yield {
         type: "assistant",
         session_id: sessionId,
-        message: { content: [{ type: "tool_use", id: "tu1", name: "Read", input: { path: "x" } }] },
+        message: { content: [{ type: "tool_use", id: "tu1", name: tu.name, input: tu.input }] },
       };
     }
 

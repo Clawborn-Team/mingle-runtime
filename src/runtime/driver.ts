@@ -12,6 +12,19 @@ import type { WakePacket } from "../protocol/wake-packet.js";
 
 export type RuntimeKind = "openclaw" | "claude-code" | "codex" | "workbuddy";
 
+/** A structured interview question (mingle.message.v1 `question` block). Produced by a
+ *  driver that intercepts its provider's NATIVE ask construct (Claude `AskUserQuestion`)
+ *  and surfaced to the consumer, which delivers it as a structured message (spec §5). */
+export type QuestionBlock = {
+  type: "question";
+  question_id: string;
+  prompt: string;
+  options?: { id: string; label: string }[];
+  allow_multiple?: boolean;
+  allow_free_text?: boolean;
+  status: "open" | "answered";
+};
+
 /** The unified turn event stream (spec §5.2). Not every provider emits every
  *  variant — capabilities say which are real; the runtime never fabricates the rest. */
 export type RuntimeEvent =
@@ -21,6 +34,7 @@ export type RuntimeEvent =
   | { type: "tool.completed"; turnId: string; toolId: string; ok: boolean; detail?: string }
   | { type: "approval.requested"; turnId: string; approvalId: string; detail: string }
   | { type: "file.changed"; turnId: string; path: string }
+  | { type: "question.raised"; turnId: string; questionId: string; block: QuestionBlock }
   | { type: "turn.completed"; turnId: string; text?: string }
   | { type: "turn.failed"; turnId: string; error: string };
 

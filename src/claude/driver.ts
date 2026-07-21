@@ -20,6 +20,7 @@ import type {
   OpenSessionInput,
   ProviderSession,
   ProviderSessionRef,
+  QuestionBlock,
   RunTurnInput,
   RuntimeCapabilities,
   RuntimeEvent,
@@ -117,12 +118,20 @@ export class ClaudeAgentDriver implements AgentRuntimeDriver {
 
     let assembled = "";
     let failed: string | undefined;
+    let asked = false;
     try {
-      for await (const msg of this.query({ prompt, options })) {
+      outer: for await (const msg of this.query({ prompt, options })) {
         for (const ev of this.mapMessage(msg, turnId)) {
           if (ev.type === "assistant.delta") assembled += ev.text;
           if (ev.type === "turn.failed") failed = ev.error;
           yield ev;
+          if (ev.type === "question.raised") {
+            // Native AskUserQuestion: end THIS round now (spec §5.2, approach #1). The
+            // answer arrives as a later wake that resumes the session. Breaking the
+            // for-await calls the query iterator's return(), terminating the SDK turn.
+            asked = true;
+            break outer;
+          }
         }
       }
     } catch (err) {
@@ -130,6 +139,12 @@ export class ClaudeAgentDriver implements AgentRuntimeDriver {
       return;
     }
 
+    if (asked) {
+      // A question turn has no plaintext reply to deliver; the consumer builds the
+      // structured message from the question.raised block(s). body stays a short fallback.
+      yield { type: "turn.completed", turnId };
+      return;
+    }
     if (!failed) yield { type: "turn.completed", turnId, text: assembled || undefined };
   }
 
@@ -140,6 +155,9 @@ export class ClaudeAgentDriver implements AgentRuntimeDriver {
       for (const block of content) {
         if (block.type === "text" && typeof block.text === "string") {
           yield { type: "assistant.delta", turnId, text: block.text };
+        } else if (block.type === "tool_use" && block.name === "AskUserQuestion") {
+          // Native structured ask: surface as question.raised, never as a plain tool call.
+          yield* mapAskUserQuestion(block, turnId);
         } else if (block.type === "tool_use") {
           yield { type: "tool.started", turnId, toolId: String(block.id ?? ""), name: String(block.name ?? "") };
         }
@@ -160,6 +178,9 @@ export class ClaudeAgentDriver implements AgentRuntimeDriver {
     const allowed = this.opts.allowedTools;
     const denied = this.deniedTools;
     return async (toolName, input) => {
+      // AskUserQuestion is intercepted by the driver (surfaced as a structured question
+      // and the round ends). Deny the native prompt so the real SDK never blocks on it.
+      if (toolName === "AskUserQuestion") return { behavior: "deny", message: "handled by mingle as a structured question" };
       if (denied.has(toolName)) return { behavior: "deny", message: `${toolName} is not permitted for this agent` };
       if (allowed && allowed.length > 0 && !allowed.includes(toolName) && !toolName.startsWith("mcp__")) {
         return { behavior: "deny", message: `${toolName} is not in the allowed tools` };
@@ -192,4 +213,40 @@ function sessionIdOf(msg: SdkMessage): string | undefined {
     return (msg as { session_id?: string }).session_id;
   }
   return undefined;
+}
+
+/**
+ * Map a native Claude `AskUserQuestion` tool_use into one `question.raised` event per
+ * question (spec §5.3). The tool input is `{ questions: [{ question, header, multiSelect,
+ * options: [{ label, description }] }] }`. Each question_id is derived from the tool_use id
+ * + index so the answer round-trip can correlate it back to this turn's session.
+ */
+function* mapAskUserQuestion(block: Record<string, unknown>, turnId: string): Iterable<RuntimeEvent> {
+  const toolUseId = String(block.id ?? "aq");
+  const input = (block.input ?? {}) as { questions?: unknown };
+  const questions = Array.isArray(input.questions) ? input.questions : [];
+  for (let i = 0; i < questions.length; i++) {
+    const q = (questions[i] ?? {}) as { question?: unknown; multiSelect?: unknown; options?: unknown };
+    const prompt = typeof q.question === "string" ? q.question : "";
+    if (!prompt) continue;
+    const rawOptions = Array.isArray(q.options) ? q.options : [];
+    const options = rawOptions
+      .map((o, oi) => {
+        const opt = (o ?? {}) as { label?: unknown };
+        const label = typeof opt.label === "string" ? opt.label : "";
+        return label ? { id: `${toolUseId}-${i}-${oi}`, label } : undefined;
+      })
+      .filter((o): o is { id: string; label: string } => o !== undefined);
+    const questionId = `${toolUseId}-${i}`;
+    const questionBlock: QuestionBlock = {
+      type: "question",
+      question_id: questionId,
+      prompt,
+      ...(options.length > 0 ? { options } : {}),
+      allow_multiple: q.multiSelect === true,
+      allow_free_text: options.length === 0,
+      status: "open",
+    };
+    yield { type: "question.raised", turnId, questionId, block: questionBlock };
+  }
 }
