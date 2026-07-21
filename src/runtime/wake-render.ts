@@ -108,6 +108,14 @@ function renderImmediateEvent(packet: WakePacket): string {
     out.push("- conversation: (none — no recoverable scope on this event)");
   }
 
+  const answer = questionAnswerOf(event);
+  if (answer) {
+    // This message is the human's answer to a question this agent asked earlier in the
+    // SAME conversation (the session is being resumed). Frame it so the model continues
+    // its prior line of thought rather than treating it as a fresh, context-free reply.
+    out.push("- This is the person's answer to a question you asked earlier in this conversation:");
+    out.push(indent(answer));
+  }
   const body = bodyOf(event);
   out.push("- message:");
   out.push(body ? indent(body) : indent("(no text body on this event)"));
@@ -171,6 +179,25 @@ function senderOf(event: WakeEvent): string | undefined {
 function bodyOf(event: WakeEvent): string | undefined {
   const body = (event.payload as { message?: { body?: unknown } } | undefined)?.message?.body;
   return typeof body === "string" && body.trim() ? body : undefined;
+}
+
+/** If the incoming message carries a mingle.message.v1 `question_answer` reference
+ *  (im-web attaches one when a person answers a structured question), return a short
+ *  human-readable description of the answer so wake-render can frame the resume. */
+function questionAnswerOf(event: WakeEvent): string | undefined {
+  const payload = (event.payload as { message?: { payload?: unknown } } | undefined)?.message?.payload as
+    | { blocks?: unknown }
+    | undefined;
+  const blocks = Array.isArray(payload?.blocks) ? payload!.blocks : [];
+  for (const block of blocks) {
+    const b = (block ?? {}) as { type?: unknown; kind?: unknown; data?: unknown };
+    if (b.type === "provider_raw" && b.kind === "question_answer") {
+      const data = (b.data ?? {}) as { answer?: unknown };
+      if (typeof data.answer === "string" && data.answer.trim()) return data.answer.trim();
+      return "(answer provided)";
+    }
+  }
+  return undefined;
 }
 
 function attachmentsOf(event: WakeEvent): Array<Record<string, unknown>> {

@@ -83,6 +83,19 @@ describe("renderWakeInput (P1-5 — one trusted Wake Packet → provider input)"
     expect(ownerContextTask(parseWakePacket(packet))).toMatchObject({ mode: "recent-briefing", days: 7 });
   });
 
+  it("frames a question_answer message as the resume of an earlier question", () => {
+    const raw = structuredClone(dmWakePacket) as any;
+    raw.wake.event.payload.message.body = "方案 A";
+    raw.wake.event.payload.message.content_type = "structured";
+    raw.wake.event.payload.message.payload = {
+      schema: "mingle.message.v1",
+      blocks: [{ type: "provider_raw", kind: "question_answer", data: { question_id: "q1", answer: "方案 A" } }],
+    };
+    const text = renderWakeInput(parseWakePacket(raw));
+    expect(text).toContain("answer to a question you asked earlier");
+    expect(text).toContain("方案 A");
+  });
+
   it("grounds a materialized local image path separately from message text", () => {
     const raw = structuredClone(dmWakePacket) as any;
     raw.wake.event.payload.message.attachments = [{
