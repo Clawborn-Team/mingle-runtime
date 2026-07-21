@@ -14,13 +14,16 @@ import type { WakePacket } from "../protocol/wake-packet.js";
 import { buildWakePacket, deriveConversation } from "../protocol/wake-adapter.js";
 import { deriveScopeKey } from "../protocol/scope.js";
 import type { RuntimeUpdateDirective } from "./self-update.js";
-import type { AgentRuntimeDriver, ProviderSession, RuntimeEvent } from "./driver.js";
+import type { AgentRuntimeDriver, ProviderSession, QuestionBlock, RuntimeEvent } from "./driver.js";
 import type { RuntimeKind, SessionRegistry } from "./session-registry.js";
 import { materializeWakeMedia } from "./media-materializer.js";
 import { summarizeEvent } from "./activity-summary.js";
 
 /** Where a live-status update is directed: a DM peer, or a channel (broadcast to members). */
 export type ActivityTarget = { peerId: string } | { channelId: string };
+
+/** Optional structured content (mingle.message.v1) carried on a sent message. */
+export type StructuredContent = { contentType: "structured"; payload: Record<string, unknown> };
 
 /** One agent binding the runtime drives. */
 export type Binding = {
@@ -51,10 +54,10 @@ export interface EventCenterClient {
   /** Negative-ack a single event so the Event Center backs it off + eventually
    *  dead-letters it (mirrors im-server's per-event delivery discipline). */
   nack(eventId: string, reason: string): Promise<void>;
-  sendDm(to: string, body: string): Promise<{ ok: boolean; status: number }>;
+  sendDm(to: string, body: string, structured?: StructuredContent): Promise<{ ok: boolean; status: number }>;
   downloadMedia?(mediaId: string): Promise<{ bytes: Buffer; contentType: string }>;
   /** Post a reply back to a channel (group/plaza @ + follow-up, P1-3). */
-  postToChannel(channelId: string, body: string): Promise<{ ok: boolean; status: number }>;
+  postToChannel(channelId: string, body: string, structured?: StructuredContent): Promise<{ ok: boolean; status: number }>;
   /** Report a turn's ephemeral live status toward a DM peer or a channel (rolling
    *  one-line summary). Optional (best-effort presence) so test fakes needn't implement
    *  it; `working` sets/refreshes the line, `done`/`failed` clear it. */
@@ -144,9 +147,35 @@ export async function processWake(input: ProcessWakeInput): Promise<ProcessWakeR
     health: events.some((e) => e.type === "turn.failed") ? "error" : "ok",
   });
 
-  const delivery = reply ? await deliverReply(packet, reply, imClient) : "none";
+  // A turn that raised native questions delivers ONE structured message (the question
+  // blocks) instead of a plaintext reply; the answer arrives as a later wake that
+  // resumes THIS scope's session naturally (spec §5, approach #1).
+  const questionBlocks = events.flatMap((e) => (e.type === "question.raised" ? [e.block] : []));
+  let outBody = reply;
+  let structured: StructuredContent | undefined;
+  if (questionBlocks.length > 0) {
+    const msg = buildQuestionMessage(questionBlocks, binding.runtimeKind);
+    outBody = msg.body;
+    structured = msg.structured;
+  }
 
-  return { scopeKey, session, events, reply, delivery };
+  const delivery = outBody ? await deliverReply(packet, outBody, imClient, structured) : "none";
+
+  return { scopeKey, session, events, reply: outBody, delivery };
+}
+
+/** Assemble a mingle.message.v1 structured message carrying the turn's question block(s).
+ *  body stays a short non-empty plaintext fallback (spec §5.1). */
+function buildQuestionMessage(
+  blocks: QuestionBlock[],
+  runtimeKind: RuntimeKind,
+): { body: string; structured: StructuredContent } {
+  const body = blocks.length === 1 ? blocks[0]!.prompt : "我想先确认几个问题";
+  const provider = runtimeKind === "claude-code" || runtimeKind === "codex" ? runtimeKind : null;
+  return {
+    body,
+    structured: { contentType: "structured", payload: { schema: "mingle.message.v1", provider, blocks } },
+  };
 }
 
 /**
@@ -164,12 +193,13 @@ async function deliverReply(
   packet: WakePacket,
   reply: string,
   imClient: EventCenterClient,
+  structured?: StructuredContent,
 ): Promise<ReplyDelivery> {
   const target = packet.conversation?.reply_target;
   if (!target) return "unsupported";
   switch (target.kind) {
     case "dm": {
-      const r = await imClient.sendDm(target.peer_id, reply);
+      const r = await imClient.sendDm(target.peer_id, reply, structured);
       // A failed send (403/500/…) must NOT be treated as delivered — throw so the
       // caller NACKs (backoff + redelivery) instead of ACKing a lost reply (P0-b).
       if (!r.ok) throw new Error(`dm delivery failed (status ${r.status})`);
@@ -178,7 +208,7 @@ async function deliverReply(
     case "channel": {
       const slug = channelSlugFromEvent(packet);
       if (!slug) return "unsupported";
-      const r = await imClient.postToChannel(slug, reply);
+      const r = await imClient.postToChannel(slug, reply, structured);
       if (!r.ok) throw new Error(`channel delivery failed (status ${r.status})`);
       return "delivered";
     }

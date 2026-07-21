@@ -32,9 +32,14 @@ export function createHttpEventCenterClient(cfg: HttpClientConfig): EventCenterC
     "X-Mingle-Runtime-Capabilities": RUNTIME_CAPABILITIES.join(","),
   };
 
-  async function postChannel(slug: string, body: string): Promise<{ ok: boolean; status: number }> {
+  async function postChannel(
+    slug: string,
+    body: string,
+    structured?: { contentType: "structured"; payload: Record<string, unknown> },
+  ): Promise<{ ok: boolean; status: number }> {
     const url = `${base}/v1/channels/${encodeURIComponent(slug)}/messages`;
-    const res = await doFetch(url, { method: "POST", headers: auth, body: JSON.stringify({ body }) });
+    const extra = structured ? { content_type: structured.contentType, payload: structured.payload } : {};
+    const res = await doFetch(url, { method: "POST", headers: auth, body: JSON.stringify({ body, ...extra }) });
     return { ok: res.status === 201, status: res.status };
   }
 
@@ -79,11 +84,12 @@ export function createHttpEventCenterClient(cfg: HttpClientConfig): EventCenterC
       }
     },
 
-    async sendDm(to, body) {
+    async sendDm(to, body, structured) {
+      const extra = structured ? { content_type: structured.contentType, payload: structured.payload } : {};
       const res = await doFetch(`${base}/v1/messages`, {
         method: "POST",
         headers: auth,
-        body: JSON.stringify({ to, body }),
+        body: JSON.stringify({ to, body, ...extra }),
       });
       return { ok: res.status === 201, status: res.status };
     },
@@ -126,15 +132,15 @@ export function createHttpEventCenterClient(cfg: HttpClientConfig): EventCenterC
 
     /** Post a reply to a channel by slug. If we're not a member yet (403), join
      *  once and retry — mirrors mingle-hosted-agent's proven channel-reply path. */
-    async postToChannel(slug, body) {
-      const first = await postChannel(slug, body);
+    async postToChannel(slug, body, structured) {
+      const first = await postChannel(slug, body, structured);
       if (first.status !== 403) return first;
       const joined = await doFetch(`${base}/v1/channels/${encodeURIComponent(slug)}/join`, {
         method: "POST",
         headers: auth,
       });
       if (joined.status < 200 || joined.status >= 300) return first;
-      return postChannel(slug, body);
+      return postChannel(slug, body, structured);
     },
   };
 }
