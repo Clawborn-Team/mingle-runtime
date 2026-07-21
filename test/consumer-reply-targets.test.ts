@@ -59,6 +59,24 @@ describe("reply-target delivery (P1-3)", () => {
     expect(im.dms).toEqual([]);
   });
 
+  it("broadcasts live status to the channel (channelId target) while a channel turn runs", async () => {
+    const registry = new InMemorySessionRegistry();
+    const driver = new FakeDriver({ reply: "我也想去！" });
+    const im = fakeIm([]);
+    const acts: { state: string; target: unknown }[] = [];
+    (im as unknown as { postActivity: (t: unknown, s: string, d?: string) => Promise<void> }).postActivity = async (t, s) => {
+      acts.push({ state: s, target: t });
+    };
+    const packet = parseWakePacket(channelMentionWakePacket);
+
+    await processWake({ packet, binding, driver, registry, imClient: im });
+
+    expect(acts.map((a) => a.state)).toContain("working");
+    expect(acts.at(-1)!.state).toBe("done");
+    // channel live status targets the channel id (not a DM peer)
+    expect(acts[0]!.target).toEqual({ channelId: "ch9" });
+  });
+
   it("resumes the SAME channel session on a follow-up wake (no new session)", async () => {
     const registry = new InMemorySessionRegistry();
     const driver = new FakeDriver();

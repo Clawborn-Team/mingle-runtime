@@ -110,13 +110,14 @@ export function createHttpEventCenterClient(cfg: HttpClientConfig): EventCenterC
       }
     },
 
-    async postActivity(peerId, state, detail) {
+    async postActivity(target, state, detail) {
       // Best-effort ephemeral presence; never let it break a turn.
+      const to = "peerId" in target ? { peer_id: target.peerId } : { channel_id: target.channelId };
       try {
         await doFetch(`${base}/v1/activity`, {
           method: "POST",
           headers: auth,
-          body: JSON.stringify({ peer_id: peerId, state, ...(detail ? { detail } : {}) }),
+          body: JSON.stringify({ ...to, state, ...(detail ? { detail } : {}) }),
         });
       } catch {
         /* ignore */

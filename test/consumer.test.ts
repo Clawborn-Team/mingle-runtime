@@ -53,16 +53,22 @@ describe("processWake", () => {
     expect(driver.openedScopes).toEqual(["dm:p1"]);
   });
 
-  it("emits truthful DM activity: thinking when the turn starts, cleared (done) on completion", async () => {
+  it("emits a rolling DM live status: working+summary while the turn runs, cleared (done) on completion", async () => {
     const registry = new InMemorySessionRegistry();
     const driver = new FakeDriver({ reply: "hi" });
     const im = fakeImClient([]);
-    const acts: string[] = [];
-    (im as unknown as { postActivity: (p: string, s: string) => Promise<void> }).postActivity = async (_p, s) => {
-      acts.push(s);
+    const acts: { state: string; detail?: string; target: unknown }[] = [];
+    (im as unknown as { postActivity: (t: unknown, s: string, d?: string) => Promise<void> }).postActivity = async (t, s, d) => {
+      acts.push({ state: s, detail: d, target: t });
     };
     await processWake({ packet: parseWakePacket(dmWakePacket), binding, driver, registry, imClient: im });
-    expect(acts).toEqual(["thinking", "done"]); // set on turn.started, cleared on completion
+    // rolling: thinking → reply tail (both "working"), then cleared with "done"
+    expect(acts.map((a) => a.state)).toEqual(["working", "working", "done"]);
+    expect(acts[0]!.detail).toBe("正在思考…");
+    expect(acts[1]!.detail).toBe("正在回复：hi");
+    expect(acts.at(-1)!.state).toBe("done");
+    // DM targets carry a peerId
+    expect(acts[0]!.target).toHaveProperty("peerId");
   });
 
   it("keeps downloaded images available for exactly the provider turn, then removes them", async () => {

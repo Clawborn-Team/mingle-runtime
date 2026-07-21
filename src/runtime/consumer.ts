@@ -17,6 +17,10 @@ import type { RuntimeUpdateDirective } from "./self-update.js";
 import type { AgentRuntimeDriver, ProviderSession, RuntimeEvent } from "./driver.js";
 import type { RuntimeKind, SessionRegistry } from "./session-registry.js";
 import { materializeWakeMedia } from "./media-materializer.js";
+import { summarizeEvent } from "./activity-summary.js";
+
+/** Where a live-status update is directed: a DM peer, or a channel (broadcast to members). */
+export type ActivityTarget = { peerId: string } | { channelId: string };
 
 /** One agent binding the runtime drives. */
 export type Binding = {
@@ -51,9 +55,10 @@ export interface EventCenterClient {
   downloadMedia?(mediaId: string): Promise<{ bytes: Buffer; contentType: string }>;
   /** Post a reply back to a channel (group/plaza @ + follow-up, P1-3). */
   postToChannel(channelId: string, body: string): Promise<{ ok: boolean; status: number }>;
-  /** Report ephemeral turn activity to a DM peer (truthful thinking indicator). Optional
-   *  (best-effort presence) so test fakes needn't implement it; `done`/`failed` clear it. */
-  postActivity?(peerId: string, state: "thinking" | "tool" | "done" | "failed", detail?: string): Promise<void>;
+  /** Report a turn's ephemeral live status toward a DM peer or a channel (rolling
+   *  one-line summary). Optional (best-effort presence) so test fakes needn't implement
+   *  it; `working` sets/refreshes the line, `done`/`failed` clear it. */
+  postActivity?(target: ActivityTarget, state: "working" | "done" | "failed", detail?: string): Promise<void>;
   /** Best-effort product status for the owner's Local Agent page. Contains no
    * session text, only refresh state metadata. */
   reportOwnerContext?(status: { status: "prepared" | "success" | "failure"; updated_at: number; mode: "recent-briefing" | "owner-portrait"; material_change?: boolean; error?: string }): Promise<void>;
@@ -104,17 +109,19 @@ export async function processWake(input: ProcessWakeInput): Promise<ProcessWakeR
     });
   }
 
-  // Truthful activity signal: only a DM has a single peer to notify. Emit as the turn
-  // actually runs (thinking on start, tool on tool.started) and clear on completion —
-  // best-effort, never blocks the turn (spec §B).
+  // Truthful live status: a rolling one-line summary of the latest intermediate product,
+  // pushed as the turn runs and cleared on completion. A DM notifies its single peer; a
+  // channel broadcasts to its members. Best-effort, never blocks the turn (spec §4).
   const rt = packet.conversation?.reply_target;
-  const peerId = rt?.kind === "dm" ? rt.peer_id : undefined;
-  const activity = (state: "thinking" | "tool" | "done" | "failed", detail?: string) => {
-    if (peerId) void imClient.postActivity?.(peerId, state, detail).catch(() => {});
+  const activityTarget: ActivityTarget | undefined =
+    rt?.kind === "dm" ? { peerId: rt.peer_id } : rt?.kind === "channel" ? { channelId: rt.channel_id } : undefined;
+  const pushActivity = (state: "working" | "done" | "failed", detail?: string) => {
+    if (activityTarget) void imClient.postActivity?.(activityTarget, state, detail).catch(() => {});
   };
 
   const events: RuntimeEvent[] = [];
   let reply: string | undefined;
+  let assistantText = "";
   const materialized = await materializeWakeMedia(packet, {
     imageInputs: driver.capabilities.imageInputs,
     downloadMedia: imClient.downloadMedia?.bind(imClient),
@@ -122,12 +129,13 @@ export async function processWake(input: ProcessWakeInput): Promise<ProcessWakeR
   try {
     for await (const ev of driver.runTurn({ session, packet: materialized.packet })) {
       events.push(ev);
-      if (ev.type === "turn.started") activity("thinking");
-      else if (ev.type === "tool.started") activity("tool", "name" in ev ? ev.name : undefined);
+      if (ev.type === "assistant.delta") assistantText += ev.text;
       if (ev.type === "turn.completed" && ev.text) reply = ev.text;
+      const line = summarizeEvent(ev, { assistantText });
+      if (line) pushActivity("working", line);
     }
   } finally {
-    activity(events.some((e) => e.type === "turn.failed") ? "failed" : "done");
+    pushActivity(events.some((e) => e.type === "turn.failed") ? "failed" : "done");
     await materialized.cleanup();
   }
 
