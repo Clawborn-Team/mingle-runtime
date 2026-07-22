@@ -18,6 +18,7 @@ import type { AgentRuntimeDriver, ProviderSession, QuestionBlock, RuntimeEvent }
 import type { RuntimeKind, SessionRegistry } from "./session-registry.js";
 import { materializeWakeMedia } from "./media-materializer.js";
 import { summarizeEvent } from "./activity-summary.js";
+import { isOwnerContextRefresh } from "./wake-render.js";
 
 /** Where a live-status update is directed: a DM peer, or a channel (broadcast to members). */
 export type ActivityTarget = { peerId: string } | { channelId: string };
@@ -65,6 +66,10 @@ export interface EventCenterClient {
   /** Best-effort product status for the owner's Local Agent page. Contains no
    * session text, only refresh state metadata. */
   reportOwnerContext?(status: { status: "prepared" | "success" | "failure"; updated_at: number; mode: "recent-briefing" | "owner-portrait"; material_change?: boolean; error?: string }): Promise<void>;
+  /** Commit the just-delivered owner-context refresh's window fingerprint. Called by
+   *  processWake ONLY after an owner-context report actually reached the Companion, so
+   *  a computed-but-undelivered refresh never consumes the window (no-change-gate fix). */
+  commitOwnerContext?(): Promise<void>;
 }
 
 /** Whether a turn's reply reached its target. `unsupported` means the reply
@@ -160,6 +165,14 @@ export async function processWake(input: ProcessWakeInput): Promise<ProcessWakeR
   }
 
   const delivery = outBody ? await deliverReply(packet, outBody, imClient, structured) : "none";
+
+  // An owner-context refresh consumes its window ONLY once the distilled report has
+  // actually been delivered to the Companion. Committing at prepare-time (before the
+  // model distilled / before delivery) let an undelivered refresh silently mark the
+  // window seen, turning the next real refresh into a canned empty report.
+  if (delivery === "delivered" && isOwnerContextRefresh(packet)) {
+    await imClient.commitOwnerContext?.();
+  }
 
   return { scopeKey, session, events, reply: outBody, delivery };
 }

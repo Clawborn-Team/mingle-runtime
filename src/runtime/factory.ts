@@ -46,6 +46,27 @@ function ownerContextConfig(binding: InstalledBinding) {
   return binding.ownerContext ?? { enabled: true, days: 7, excludeProjects: [], excludeSessions: [] };
 }
 
+/**
+ * Per-binding coordinator that defers an owner-context window commit until the
+ * distilled report is actually delivered. `prepareOwnerContextRefresh` runs inside
+ * the driver turn (before delivery), so its `commit()` is parked here; the consumer
+ * calls `commitOwnerContext()` post-delivery (via the wired imClient) to fire it.
+ * Only the latest prepared commit is retained — a superseding refresh replaces it.
+ */
+function makeOwnerContextCommitGate() {
+  let pending: (() => Promise<void>) | undefined;
+  return {
+    arm(commit: () => Promise<void>) {
+      pending = commit;
+    },
+    async fire() {
+      const commit = pending;
+      pending = undefined;
+      if (commit) await commit();
+    },
+  };
+}
+
 /** Assemble the real provider driver for one binding. Honest failure when the
  *  provider isn't installed/authenticated (§5.5) — no silent fake fallback. */
 export async function resolveInstalledDriver(
@@ -55,6 +76,10 @@ export async function resolveInstalledDriver(
   // The owner-authored local definition IS who this agent is; the default persona
   // only applies when nothing was authored (product-vision two-tier model).
   const persona = (await loadAuthoredPersona(ib)) ?? DEFAULT_LOCAL_AGENT_PERSONA;
+  // Wire the deferred owner-context commit: prepare arms it, the consumer fires it
+  // via imClient.commitOwnerContext() only after the report was delivered.
+  const commitGate = makeOwnerContextCommitGate();
+  imClient.commitOwnerContext = () => commitGate.fire();
   switch (ib.runtimeKind) {
     case "claude-code": {
       const query = await loadClaudeQuery();
@@ -96,6 +121,8 @@ export async function resolveInstalledDriver(
                 excludeSessions: cfg.excludeSessions,
               }),
               });
+              // Do NOT commit the window here — only after delivery (consumer → commitGate.fire()).
+              commitGate.arm(result.commit);
               await imClient.reportOwnerContext?.({ status: "prepared", updated_at: Date.now(), mode: task.mode, material_change: result.materialChange });
               return result.prompt;
             } catch (error) {
@@ -137,6 +164,8 @@ export async function resolveInstalledDriver(
                 excludeSessions: cfg.excludeSessions,
               }),
               });
+              // Do NOT commit the window here — only after delivery (consumer → commitGate.fire()).
+              commitGate.arm(result.commit);
               await imClient.reportOwnerContext?.({ status: "prepared", updated_at: Date.now(), mode: task.mode, material_change: result.materialChange });
               return result.prompt;
             } catch (error) {

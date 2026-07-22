@@ -114,6 +114,17 @@ export const channelRawEventNoSlug = {
   type: "channel.mention.created",
   payload: { conversation: { kind: "group", channel_id: "chX" }, message: { id: "m", body: "@小龙 hi", seq: 1 } },
 } as const;
+/** An owner-context refresh task, carried on a DM event (body is the task JSON).
+ *  Its reply target is a dm, so a distilled report is delivered via sendDm. */
+export const ownerContextRefreshRawEvent = {
+  id: "e_owner_ctx",
+  type: "dm.message.created",
+  payload: {
+    conversation: { kind: "direct", peer_id: "owner1", peer_username: "owner" },
+    message: { id: "m_oc", body: JSON.stringify({ task: "owner_context_refresh", mode: "recent-briefing", days: 7 }), seq: 1 },
+  },
+} as const;
+
 /** An unknown/non-actionable event type → derives no conversation → dropped + ACKed. */
 export const unknownRawEvent = {
   id: "e_unknown",

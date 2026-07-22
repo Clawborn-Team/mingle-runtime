@@ -18,6 +18,27 @@ describe("local session sanitation", () => {
     expect(text.length).toBeLessThan(900);
   });
 
+  it("strips the runtime's OWN injected wake/persona/owner-context preambles before budgeting", () => {
+    // A codex thread echoes back the runtime's injected wake input as a user message.
+    // That runtime-authored text must not eat the char budget meant for real owner work.
+    const injectedWake =
+      "## Who you are\nYou are the owner's Local Agent.\n\n" +
+      "[Mingle wake · agent a1 (local) · trace t-1]\n\n" +
+      "## Owner context refresh — execute the mingle-owner-context Skill\n" +
+      "This is an owner-initiated private task. Return only an owner-context-v1 JSON report.";
+    const realWork = "Let's finalize the pricing model for the paid Service Agents tier.";
+    const clean = sanitizeSessions([{ provider: "codex", sessionId: "s", project: "alpha", updatedAt: "2026-07-20", messages: [
+      { role: "user", text: injectedWake },
+      { role: "assistant", text: realWork },
+    ] }], { maxTotalChars: 200 });
+    const text = JSON.stringify(clean);
+    expect(text).not.toContain("Who you are");
+    expect(text).not.toContain("Mingle wake");
+    expect(text).not.toContain("Owner context refresh");
+    // Real owner content survives the (now un-crowded) budget.
+    expect(text).toContain("pricing model");
+  });
+
   it("fingerprints normalized content deterministically", () => {
     const sessions = [{ provider: "codex" as const, sessionId: "s", project: "a", updatedAt: "x", messages: [{ role: "user" as const, text: "hi" }] }];
     expect(fingerprintSessions(sessions)).toBe(fingerprintSessions(structuredClone(sessions)));
