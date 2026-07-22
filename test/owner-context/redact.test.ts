@@ -39,6 +39,36 @@ describe("local session sanitation", () => {
     expect(text).toContain("pricing model");
   });
 
+  it("strips the injected preamble even when the owner-authored persona is MULTI-PARAGRAPH (P1-5)", () => {
+    // Real personas (Codex AGENTS.md, Claude agent files) inserted VERBATIM by the
+    // renderer contain blank lines / multiple paragraphs. The matcher must not stop at
+    // the first blank line inside the persona — it must scan forward to the banner.
+    const persona =
+      "You are the owner's Local Agent.\n" +
+      "\n" +
+      "You keep the owner's private data local and only surface distilled context.\n" +
+      "\n" +
+      "Be concise. Never expose transcripts, credentials, or paths.";
+    const injectedWake =
+      "## Who you are\n" + persona + "\n\n" +
+      "[Mingle wake · agent a1 (local) · trace t-mp]\n\n" +
+      "## Owner context refresh — execute the mingle-owner-context Skill\n" +
+      "This is an owner-initiated private task. Return only an owner-context-v1 JSON report.";
+    const realWork = "Let's finalize the pricing model for the paid Service Agents tier.";
+    const clean = sanitizeSessions([{ provider: "codex", sessionId: "s", project: "alpha", updatedAt: "2026-07-20", messages: [
+      { role: "user", text: injectedWake },
+      { role: "assistant", text: realWork },
+    ] }], { maxTotalChars: 200 });
+    const text = JSON.stringify(clean);
+    // The WHOLE injected preamble (persona body + banner + section) is gone, not just its head.
+    expect(text).not.toContain("Who you are");
+    expect(text).not.toContain("Mingle wake");
+    expect(text).not.toContain("Owner context refresh");
+    expect(text).not.toContain("keep the owner's private data local");
+    // Real owner content survives the (now un-crowded) budget.
+    expect(text).toContain("pricing model");
+  });
+
   it("keeps an assistant/owner message that merely QUOTES a wake banner with real content after it (P1-5)", () => {
     // Debugging/quoting a Mingle wake banner inside a real message must NOT nuke the
     // surrounding owner decision — the unanchored INJECTED_WAKE marker used to.

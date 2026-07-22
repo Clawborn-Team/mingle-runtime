@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { processWake, type EventCenterClient, type Binding } from "../src/runtime/consumer.js";
+import { processWake, runBindingOnce, type EventCenterClient, type UpdatesResult, type Binding } from "../src/runtime/consumer.js";
 import { InMemorySessionRegistry } from "../src/runtime/session-registry.js";
 import { FakeDriver } from "../src/runtime/fake-driver.js";
 import { buildWakePacket } from "../src/protocol/wake-adapter.js";
@@ -66,6 +66,49 @@ function fakeIm(overrides: Partial<EventCenterClient> = {}): FakeIm {
 }
 
 const binding: Binding = { bindingId: "b1", agentAccountId: "a1", ownerAccountId: "owner1", runtimeKind: "codex" };
+
+/** A drain-path Event Center fake that records ACK / NACK / commit so the promised
+ *  "ACK-without-NACK on delivered-but-invalid; NACK-without-commit on turn.failed"
+ *  contract is asserted through the REAL drain path (runBindingOnce), not just
+ *  processWake (whose no-op ack/nack record nothing). */
+type DrainFake = EventCenterClient & {
+  acked: string[];
+  nacked: { id: string; reason: string }[];
+  commits: number;
+  dms: { to: string; body: string }[];
+};
+function drainFake(batch: UpdatesResult): DrainFake {
+  const queue = [batch];
+  const state = { commits: 0 };
+  const im: DrainFake = {
+    acked: [],
+    nacked: [],
+    dms: [],
+    get commits() {
+      return state.commits;
+    },
+    async getUpdates() {
+      return queue.shift() ?? { events: [] };
+    },
+    async ack(ids) {
+      im.acked.push(...ids);
+    },
+    async nack(id, reason) {
+      im.nacked.push({ id, reason });
+    },
+    async sendDm(to, body) {
+      im.dms.push({ to, body });
+      return { ok: true, status: 201 };
+    },
+    async postToChannel() {
+      return { ok: true, status: 201 };
+    },
+    async commitOwnerContext() {
+      state.commits += 1;
+    },
+  } as DrainFake;
+  return im;
+}
 
 describe("owner-context commit fires only on a VALID delivered refresh", () => {
   it("commits + delivers when a valid recent-briefing report is delivered", async () => {
@@ -138,6 +181,90 @@ describe("owner-context commit fires only on a VALID delivered refresh", () => {
     const result = await processWake({ packet, binding, driver, registry, imClient: im });
 
     expect(result.delivery).toBe("delivered");
+    expect(im.commits).toBe(0);
+  });
+});
+
+describe("owner-context ACK/NACK contract through the REAL drain path (P1-4)", () => {
+  it("a VALID delivered briefing → ACK, no NACK, and the window is committed", async () => {
+    const registry = new InMemorySessionRegistry();
+    const driver = new FakeDriver({ reply: validBriefing() });
+    const im = drainFake({ events: [ownerContextRefreshRawEvent] });
+
+    await runBindingOnce({ binding, driver, registry, imClient: im });
+
+    expect(im.acked).toEqual(["e_owner_ctx"]);
+    expect(im.nacked).toEqual([]);
+    expect(im.commits).toBe(1);
+  });
+
+  it("a MALFORMED delivered report (apology) → ACK, NOT NACK, and does NOT commit", async () => {
+    // The DM was delivered, so the wake is ACKed (no NACK → no double-send). But the
+    // body is invalid, so the window stays open (commits=0). This is the contract the
+    // direct-processWake test could not observe (its fake ack/nack recorded nothing).
+    const registry = new InMemorySessionRegistry();
+    const driver = new FakeDriver({ reply: "Sorry, I couldn't produce that report." });
+    const im = drainFake({ events: [ownerContextRefreshRawEvent] });
+
+    await runBindingOnce({ binding, driver, registry, imClient: im });
+
+    expect(im.acked).toEqual(["e_owner_ctx"]);
+    expect(im.nacked).toEqual([]);
+    expect(im.commits).toBe(0);
+  });
+
+  it("a WRONG-MODE delivered report (portrait wake, briefing body) → ACK, NOT NACK, no commit", async () => {
+    const registry = new InMemorySessionRegistry();
+    const driver = new FakeDriver({ reply: validBriefing() }); // briefing, but wake asked for portrait
+    const im = drainFake({ events: [ownerContextPortraitRawEvent] });
+
+    await runBindingOnce({ binding, driver, registry, imClient: im });
+
+    expect(im.acked).toEqual(["e_owner_portrait"]);
+    expect(im.nacked).toEqual([]);
+    expect(im.commits).toBe(0);
+  });
+
+  it("a turn.failed owner-context turn → NACK, NOT ACK, and does NOT commit", async () => {
+    // A transiently-failed owner-context turn must NACK for backoff (no window consumed,
+    // no ACK past the gap) — the failed-turn branch of the commit gate + drain discipline.
+    const registry = new InMemorySessionRegistry();
+    const driver = new FakeDriver({ script: "approval-then-fail" }); // emits turn.failed
+    const im = drainFake({ events: [ownerContextRefreshRawEvent] });
+
+    await runBindingOnce({ binding, driver, registry, imClient: im });
+
+    expect(im.nacked.map((n) => n.id)).toEqual(["e_owner_ctx"]);
+    expect(im.acked).toEqual([]);
+    expect(im.commits).toBe(0);
+  });
+
+  it("a FAILED delivery (sendDm not ok) → NACK, NOT ACK, and does NOT commit", async () => {
+    // A valid report that fails to SEND must NACK (redeliver) and never commit the window
+    // — the delivered-guard means "actually reached the Companion", not "was attempted".
+    const registry = new InMemorySessionRegistry();
+    const driver = new FakeDriver({ reply: validBriefing() });
+    const im = drainFake({ events: [ownerContextRefreshRawEvent] });
+    im.sendDm = async () => ({ ok: false, status: 403 });
+
+    await runBindingOnce({ binding, driver, registry, imClient: im });
+
+    expect(im.nacked.map((n) => n.id)).toEqual(["e_owner_ctx"]);
+    expect(im.acked).toEqual([]);
+    expect(im.commits).toBe(0);
+  });
+
+  it("a no-reply owner-context turn → ACK (nothing to deliver), NOT NACK, no commit", async () => {
+    // Retain the existing no-reply no-commit coverage, now through the drain path: no
+    // final report → delivery is "none" → nothing to route → ACK, no NACK, no commit.
+    const registry = new InMemorySessionRegistry();
+    const driver = new FakeDriver({ reply: "" });
+    const im = drainFake({ events: [ownerContextRefreshRawEvent] });
+
+    await runBindingOnce({ binding, driver, registry, imClient: im });
+
+    expect(im.acked).toEqual(["e_owner_ctx"]);
+    expect(im.nacked).toEqual([]);
     expect(im.commits).toBe(0);
   });
 });
