@@ -1,3 +1,5 @@
+> **HISTORICAL** (build history) · Up-edge: [README.md](README.md) — kept for provenance; current design lives in [design.md](design.md)/[architecture.md](architecture.md).
+
 # Increment A2 — Codex App Server driver + NACK/backoff + SQLite persistence
 
 > Part of Workstream A. Spec §5.4 (Codex App Server), §5.3 (registry persistence),

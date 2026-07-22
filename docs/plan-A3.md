@@ -1,3 +1,5 @@
+> **HISTORICAL** (build history) · Up-edge: [README.md](README.md) — kept for provenance; current design lives in [design.md](design.md)/[architecture.md](architecture.md).
+
 # Increment A3 — Claude Agent SDK driver
 
 > Part of Workstream A. Spec §5.5 (Claude Agent SDK), §5.3 (session persistence),

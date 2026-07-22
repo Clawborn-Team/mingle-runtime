@@ -1,3 +1,5 @@
+> **HISTORICAL** (build history) · Up-edge: [README.md](README.md) — kept for provenance; current design lives in [design.md](design.md)/[architecture.md](architecture.md).
+
 # Increment A4 — OpenClaw adapter + unified install + bind-agent copy
 
 > Part of Workstream A. Spec §5.6 (OpenClaw driver), §9.1 (本机安装), §5.7 (multi-agent).

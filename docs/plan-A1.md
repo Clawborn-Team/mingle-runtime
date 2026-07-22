@@ -1,3 +1,5 @@
+> **HISTORICAL** (build history) · Up-edge: [README.md](README.md) — kept for provenance; current design lives in [design.md](design.md)/[architecture.md](architecture.md).
+
 # Increment A1 — protocol + driver contract + registry + consumer loop + FakeDriver
 
 > Part of Workstream A (`docs/superpowers/plans/2026-07-19-workstream-A-mingle-runtime.md`).

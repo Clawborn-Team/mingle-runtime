@@ -1,3 +1,5 @@
+> **HISTORICAL** (build history) · Up-edge: [README.md](README.md) — kept for provenance; current design lives in [design.md](design.md)/[architecture.md](architecture.md).
+
 # bind-agent.tsx copy rewrite — DRAFT for team-lead approval
 
 > The runtime model changed: no more "常驻连接器 + headless 驱动 (codex exec / claude -p)".
