@@ -125,6 +125,16 @@ export const ownerContextRefreshRawEvent = {
   },
 } as const;
 
+/** An owner-context refresh task in OWNER-PORTRAIT mode (body is the task JSON). */
+export const ownerContextPortraitRawEvent = {
+  id: "e_owner_portrait",
+  type: "dm.message.created",
+  payload: {
+    conversation: { kind: "direct", peer_id: "owner1", peer_username: "owner" },
+    message: { id: "m_op", body: JSON.stringify({ task: "owner_context_refresh", mode: "owner-portrait", days: 30 }), seq: 1 },
+  },
+} as const;
+
 /** An unknown/non-actionable event type → derives no conversation → dropped + ACKed. */
 export const unknownRawEvent = {
   id: "e_unknown",

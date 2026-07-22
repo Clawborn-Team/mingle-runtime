@@ -18,7 +18,8 @@ import type { AgentRuntimeDriver, ProviderSession, QuestionBlock, RuntimeEvent }
 import type { RuntimeKind, SessionRegistry } from "./session-registry.js";
 import { materializeWakeMedia } from "./media-materializer.js";
 import { summarizeEvent } from "./activity-summary.js";
-import { isOwnerContextRefresh } from "./wake-render.js";
+import { ownerContextTask } from "./wake-render.js";
+import { isValidOwnerContextReport } from "../owner-context/validate.js";
 
 /** Where a live-status update is directed: a DM peer, or a channel (broadcast to members). */
 export type ActivityTarget = { peerId: string } | { channelId: string };
@@ -166,11 +167,23 @@ export async function processWake(input: ProcessWakeInput): Promise<ProcessWakeR
 
   const delivery = outBody ? await deliverReply(packet, outBody, imClient, structured) : "none";
 
-  // An owner-context refresh consumes its window ONLY once the distilled report has
-  // actually been delivered to the Companion. Committing at prepare-time (before the
-  // model distilled / before delivery) let an undelivered refresh silently mark the
-  // window seen, turning the next real refresh into a canned empty report.
-  if (delivery === "delivered" && isOwnerContextRefresh(packet)) {
+  // An owner-context refresh consumes its window ONLY once a VALID distilled report
+  // has actually been delivered to the Companion. Two guards, both required:
+  //   1) the turn did not fail (no turn.failed event), AND
+  //   2) the delivered body validates against owner-context-v1 FOR THE REQUESTED MODE.
+  // A provider apology / truncated JSON / wrong-mode reply that still gets DM-delivered
+  // must NOT consume the window — otherwise the next identical refresh returns a canned
+  // no-change report (re-opening the stale-empty bug). We still ACK the delivered case
+  // (the caller does not NACK here), so the delivered-but-invalid path does not
+  // double-send; recovery is the next externally-triggered refresh re-distilling the
+  // still-open window (its next prepare returns material_change=true).
+  const ownerTask = ownerContextTask(packet);
+  if (
+    delivery === "delivered" &&
+    ownerTask !== null &&
+    !events.some((e) => e.type === "turn.failed") &&
+    isValidOwnerContextReport(outBody, ownerTask.mode)
+  ) {
     await imClient.commitOwnerContext?.();
   }
 
