@@ -114,10 +114,14 @@ so a daemon restart recovers every session and resumes rather than starting cold
 - **Owner-context refresh** ([`src/owner-context/`](../src/owner-context/)) — an owner-initiated
   private task that mines local Claude/Codex session history into a redacted `owner-context-v1`
   report for the Companion; never exposes raw transcripts. A window's fingerprint (the no-change
-  gate) is committed **only after the distilled report is delivered** to the Companion: `prepare`
-  returns a deferred `commit()`, and the consumer fires it (`commitOwnerContext`) post-delivery —
-  a computed-but-undelivered refresh never consumes the window. Sanitation strips the runtime's own
-  injected wake/persona/task preambles before the char budget so real owner content isn't evicted.
+  gate) is committed **only after a *valid* `owner-context-v1` report is delivered** to the
+  Companion — a malformed / wrong-mode report or a `turn.failed` NACKs and never commits: `prepare`
+  returns a deferred `commit()`, and the consumer fires it (`commitOwnerContext`) only on the
+  valid-and-delivered path, so a computed-but-undelivered (or failed) refresh never consumes the
+  window. Sanitation strips **only the runtime's own injected wake/persona/task envelope** (the
+  render's banner + injected section, tolerant of multi-paragraph personas with blank lines) before
+  the char budget — legit owner content that merely quotes a banner mid-message is never stripped,
+  so real owner content isn't evicted.
 - **Self-update** ([`src/runtime/self-update.ts`](../src/runtime/self-update.ts)) — a platform
   `runtime.update` directive on the poll relaunches the daemon at the target's immutable tarball
   URL. See [deploy.md](deploy.md) + [ADR-0006](../../docs/decisions/0006-runtime-immutable-tarball-release.md).
